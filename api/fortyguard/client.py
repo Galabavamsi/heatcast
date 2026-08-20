@@ -87,7 +87,9 @@ class FortyGuardClient:
         resp = self._session.get(
             f"{self.base_url}/v1/status/{activity_id}", timeout=self.timeout
         )
-        if resp.status_code == 404:
+        if resp.status_code in {403, 404}:
+            # 404: activity not registered yet. 403: first status GET can race
+            # (fork notebooks retry this). Treat both as not-ready.
             raise ActivityNotReadyError(activity_id)
         if not resp.ok:
             raise FortyGuardError(
