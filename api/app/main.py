@@ -58,7 +58,8 @@ from .scoring import score_aoi, slim_heatmap  # noqa: E402
 from .svi import SviError, svi_for_bbox  # noqa: E402  # CDC SVI 2022 overlay
 from .weather import fetch_elevation_m, fetch_precip  # noqa: E402
 
-ENRICH_TIMEOUT_S = 20.0
+ENRICH_CORE_S = 45.0
+ENRICH_EXTRA_S = 12.0
 
 app = FastAPI(title="HeatCast", version="0.3.0")
 app.add_middleware(
@@ -110,6 +111,21 @@ class SviRequest(BaseModel):
     north: float | None = None
     bbox: list[float] | None = None
     heatmap: dict[str, Any] | None = None
+
+
+class BriefRequest(BaseModel):
+    city: str | None = None
+    scorecard: dict[str, Any]
+    rain: dict[str, Any] | None = None
+    flood: dict[str, Any] | None = None
+    scenario: dict[str, Any] | None = None
+    coverage_miss: bool = False
+    satellite_buckets: dict[str, Any] | None = None
+    streetview_classes: dict[str, Any] | None = None
+    svi: dict[str, Any] | None = None
+    cooling: dict[str, Any] | None = None
+    shade: dict[str, Any] | None = None
+    activity_ids: dict[str, Any] | None = None
 
 
 @app.get("/health")
@@ -507,7 +523,8 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
             "scenario": scenario,
             "coverage_miss": coverage_miss,
             "activity_ids": {"tcm": activity_id, "exceedance": exceedance_id},
-        }
+        },
+        use_llm=False,
     )
 
     heatmap = slim_heatmap([] if coverage_miss else features)
@@ -563,9 +580,42 @@ def _enrich_call(name: str, fn):
         return name, None, str(exc)
 
 
+def _run_enrich_jobs(jobs: dict[str, Any], timeout_s: float) -> tuple[dict[str, object], dict[str, str]]:
+    collected: dict[str, object] = {}
+    errors: dict[str, str] = {}
+    if not jobs:
+        return collected, errors
+    pool = ThreadPoolExecutor(max_workers=max(1, len(jobs)))
+    try:
+        futs = {pool.submit(_enrich_call, name, fn): name for name, fn in jobs.items()}
+        done, pending = wait(futs, timeout=timeout_s)
+        for fut in done:
+            name, payload, err = fut.result()
+            if err:
+                errors[name] = err
+            else:
+                collected[name] = payload
+        for fut in pending:
+            errors[futs[fut]] = f"timeout after {timeout_s:.0f}s"
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return collected, errors
+
+
+@app.post("/v1/brief")
+def brief(body: BriefRequest) -> dict[str, object]:
+    """Rewrite the planner brief after satellite / SVI / OSM layers land."""
+    memo_doc = write_memo(body.model_dump(), use_llm=True)
+    return {
+        "text": memo_doc.get("text"),
+        "source": memo_doc.get("source"),
+        "model": memo_doc.get("model"),
+    }
+
+
 @app.post("/v1/enrich")
 def enrich(body: EnrichRequest) -> dict[str, object]:
-    """Premium hotspot layers. Never block analyze/heatmap — 20s per endpoint, parallel."""
+    """Premium hotspot layers. Satellite + env first; streetview/PDF are optional extras."""
     errors: dict[str, str] = {}
     activity_ids: dict[str, str | None] = {}
     env_out = None
@@ -594,7 +644,7 @@ def enrich(body: EnrichRequest) -> dict[str, object]:
                     "precipitation_mm",
                 ),
                 verbose=False,
-                timeout=ENRICH_TIMEOUT_S,
+                timeout=ENRICH_CORE_S,
             ),
         )
 
@@ -610,7 +660,7 @@ def enrich(body: EnrichRequest) -> dict[str, object]:
                 filter_type=1,
                 granularity=100,
                 verbose=False,
-                timeout=ENRICH_TIMEOUT_S,
+                timeout=ENRICH_CORE_S,
             ),
         )
 
@@ -622,33 +672,26 @@ def enrich(body: EnrichRequest) -> dict[str, object]:
                 latitude=body.lat,
                 longitude=body.lon,
                 verbose=False,
-                timeout=ENRICH_TIMEOUT_S,
+                timeout=ENRICH_EXTRA_S,
             ),
         )
 
     def intel_fn():
         return heat_intelligence_pdf(
-            body.lat, body.lon, body.temperature, body.date, timeout=ENRICH_TIMEOUT_S
+            body.lat, body.lon, body.temperature, body.date, timeout=ENRICH_EXTRA_S
         )
 
-    jobs = {
-        "env_params": env_fn,
-        "satellite": sat_fn,
-        "streetview": sv_fn,
-        "heat_intelligence": intel_fn,
-    }
-    collected: dict[str, object] = {}
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futs = {pool.submit(_enrich_call, name, fn): name for name, fn in jobs.items()}
-        done, pending = wait(futs, timeout=ENRICH_TIMEOUT_S + 2.0)
-        for fut in done:
-            name, payload, err = fut.result()
-            if err:
-                errors[name] = err
-            else:
-                collected[name] = payload
-        for fut in pending:
-            errors[futs[fut]] = f"timeout after {ENRICH_TIMEOUT_S:.0f}s"
+    collected, core_errors = _run_enrich_jobs(
+        {"env_params": env_fn, "satellite": sat_fn},
+        ENRICH_CORE_S + 2.0,
+    )
+    errors.update(core_errors)
+    extra, extra_errors = _run_enrich_jobs(
+        {"streetview": sv_fn, "heat_intelligence": intel_fn},
+        ENRICH_EXTRA_S + 1.0,
+    )
+    collected.update(extra)
+    errors.update(extra_errors)
 
     env = collected.get("env_params")
     if isinstance(env, dict):

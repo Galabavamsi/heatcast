@@ -32,7 +32,7 @@ def fetch_flood_zone(lat: float, lon: float) -> dict[str, Any] | None:
         resp = requests.get(
             NFHL_ZONES,
             params=params,
-            timeout=4,
+            timeout=8,
             headers={"User-Agent": "HeatCast/0.3 (FortyGuard hackathon FG-141)"},
         )
         resp.raise_for_status()

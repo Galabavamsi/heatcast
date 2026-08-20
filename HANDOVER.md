@@ -1,126 +1,237 @@
-# HeatCast handover
+# HeatCast handover (living)
 
-Standalone context for the next person or agent. Repo: `D:\fortyguard\heatlens`.  
-**FortyGuard Hackathon’26 · Team HumanSlop · FG-141 · deadline 30 Aug 2026.**
+This is the **team working doc**. Two people maintain it: whoever is on the keyboard today, and the other developer.  
+Product README (clone-and-run): [README.md](./README.md).
 
-Do **not** commit secrets. `FORTYGUARD_API_KEY` (and any LLM key) live only in `heatlens/api/.env`.
-
----
-
-## What this is
-
-**HeatCast** is a Track 1 urban-planner simulator: score a Houston (or Phoenix) district on FortyGuard **2 m air** tiles, then estimate what extra tree canopy *might* do using a **labeled literature overlay**.
-
-- **2D** is the scorecard (choropleth of TCM °C or exceedance hours).
-- **3D** is pitched OSM building massing for site context — not a digital twin of shade physics.
-- Tiles are **~100 m**. Neighborhood UHI, not sidewalk CFD.
-
-Product name in the UI is HeatCast. The folder is still `heatlens`.
-
----
-
-## What this is not (do not pitch these)
-
-| Tempting claim | Why not |
+| | |
 |---|---|
-| Walking / cool routes / A→B | Official Track 1 examples already include Cool Route Planner. We are the district scorecard + overlay, not a router. |
-| India / non-US AOIs | FortyGuard heatmap coverage is **United States only**. |
-| “FortyGuard simulated adding trees” | FG has **no** what-if heatmap. The slider does **not** call the API again. |
-| HeatHall / data-center flood screener | Earlier pivot (`RESEARCH-PIVOT.md`) was Track 3 industrial siting. **Overridden** by Track 1 urban planning (`RESEARCH-3D-URBAN.md`). |
-| Photoreal shade / tree canopies / facade CFD | OSM boxes + optional future suncalc ≠ FG-measured shade. |
+| **Repo** | https://github.com/Galabavamsi/heatcast (`origin/main`) |
+| **Disk** | `D:\fortyguard\heatlens` |
+| **Team** | HumanSlop · FG-141 · Track 1 urban planning |
+| **Deadline** | **30 Aug 2026** |
+| **Collaborator** | GitHub user **Hackathon-FG** (write) |
+| **Last snapshot** | 21 Aug 2026 |
+
+**Secrets stay out of git.** `FORTYGUARD_API_KEY` and `LLM_API_KEY` live only in gitignored `api/.env`. Do not paste keys into this file, PRs, or chat logs you will commit.
+
+---
+
+## How both of us keep this file current
+
+Overwrite the **Snapshot** block when the truth changes. **Append** the changelog and decision log — do not rewrite history.
+
+1. Date every edit (`YYYY-MM-DD`) and put your name or GitHub handle in the changelog row.
+2. If you ship code, add a changelog row **in the same PR/commit** when you can. If you forget, add it in the next commit — stale handover is worse than a late row.
+3. If you change a product rule (track, date, overlay formula, “do not build X”), add a **Decision** row and update Snapshot. Do not silently contradict RESEARCH-*.md; either update research or say “handover wins until research is patched.”
+4. Open work is a checklist. Move items to **Done** with a date; do not delete them.
+5. Hard-won map bugs are **do not regress**. If you fix one for real, move it to Done and leave a one-line “why it was real.”
+6. Never commit `.env`, cache dumps with PII, or API keys. `api/.env.example` may document variable *names* only.
+
+Suggested commit trailers (optional): `Handover: snapshot + changelog`.
+
+---
+
+## Snapshot — overwrite this block
+
+**As of 21 Aug 2026**
+
+HeatCast scores a **drawn US AOI** on FortyGuard TCM + exceedance, then overlays SVI / shade / cooling and a planner brief.
+
+| Area | State |
+|---|---|
+| Score / heatmap | Working. Canvas raster image source. Demo date `2024-07-15 15:00`. |
+| Draw / pan / orbit | Working. Custom orbit `easeTo({ around })`. Native `dragRotate` stays off. |
+| Layers | Isolines (canvas), SVI (SVG), Shade (SVG), Cooling (Markers). Toggles enabled whenever `analysis` exists; labels show `Shade…` / `Cooling…` while OSM loads. |
+| Planner brief | Analyze writes a **template** immediately. Client calls `POST /v1/brief` after enrich + SVI (and cooling/shade if ready). DeepSeek `deepseek-v4-flash` if `LLM_*` is set. Null layers are stripped so the model cannot refuse EPA/i-Tree just because flood is missing. |
+| Enrich | Satellite + env first (~45 s), streetview/PDF extra (~12 s), pool `shutdown(wait=False)`. Browser abort **80 s**. Streetview timeouts are not a red banner if satellite/env arrived. |
+| OSM | Sequential cooling then buildings. Overpass fail-open + disk cache. |
+| LLM | Server-only. Model **`deepseek-v4-flash`** (this key also has `deepseek-v4-pro`; no `deepseek-chat`). |
+| Public deploy | **Not shipped.** CORS is localhost-only. Render needs `0.0.0.0:$PORT`, server env keys, CORS + `NEXT_PUBLIC_API_URL`. |
+| Judging caches | **Not frozen.** EaDo / Museum / Phoenix `2024-07-15` should be cached before demo day. |
+| Video + 500-word summary | **Not started.** |
+
+**Do not start:** UTCI, NWS HeatRisk, deck.gl, India, walking/OSRM, bus-stop clones, a second product.
+
+---
+
+## Changelog (append at the top)
+
+| Date | Who | What |
+|---|---|---|
+| 2026-08-21 | Vamsi / agent | Brief after enrich: `POST /v1/brief`, compact LLM context, enrich two-phase + 80 s client timeout, FEMA 8 s, `HANDOVER.md` + README living docs. |
+| 2026-08-21 | Vamsi / agent | DeepSeek brief path (`thinking` disabled, 40 s). OSM fail-open, sequential load, shade SunCalc **degrees**. Search dropdown `skipGeocode`. GitHub `Galabavamsi/heatcast`. Status-poll **403 retry** in `api/fortyguard/client.py`. |
+| 2026-08-20 | Vamsi / agent | Initial HeatCast FastAPI + Next/MapLibre: AOI draw, TCM + exceedance, SVI, scenario overlay, 3D orbit. |
+
+---
+
+## Open work (move to Done, don’t delete)
+
+### Must before 30 Aug
+
+- [ ] Freeze **EaDo + Museum District** (optional Phoenix) TCM + exceedance + OSM caches for **2024-07-15 15:00** so judging is not a live credit lottery.
+- [ ] Public **Render** (or similar) demo: API + web, no login. Bind `0.0.0.0:$PORT`. Keys in server env. CORS for the web origin. `NEXT_PUBLIC_API_URL` at web **build** time.
+- [ ] Confirm **Hackathon-FG** still has write on github.com/Galabavamsi/heatcast.
+- [ ] **~3 min video** + **~500 word** summary. Pitch: hours above threshold on a real district, greener control tract same day, slider that does **not** pretend to be FortyGuard. Keep activity_ids on the confidence strip.
+
+### Nice if time
+
+- [ ] Persistence layer on the scorecard: longest *consecutive* hours ≥ 35 °C (fork notebooks; exceedance already exists as total hours).
+- [ ] Cause-tagged recs already start in the brief when satellite buckets exist (EPA cool pavement / USDA i-Tree). Tighten copy once Houston satellite numbers are on a frozen cache.
+- [ ] Optional second LLM pass is already gated by layer keys; watch DeepSeek spend if cooling/shade retrigger brief too often.
+
+### Done
+
+- [x] 2026-08-21 — Planner brief no longer runs at analyze with all-null satellite/SVI.
+- [x] 2026-08-21 — Enrich does not block the HTTP response on timed-out FortyGuard workers (`shutdown(wait=False)`).
+- [x] 2026-08-20/21 — Draw AOI, canvas heat, SVI SVG, OSM shade/cooling, custom orbit, US-only geocode.
+
+---
+
+## Decision log (append only)
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-08 | Track **1** HeatCast, not HeatHall / Track 3 | RESEARCH-3D-URBAN.md overrides RESEARCH-PIVOT.md on product. Keep pivot’s FG calling rules. |
+| 2026-08 | No walking routes / OSRM | Official Track 1 examples already include Cool Route Planner. |
+| 2026-08 | US only, demo **2024-07-15 15:00** | FG heatmap coverage; Phoenix 2026-08-17 empty-success billing trap. |
+| 2026-08 | Canopy slider = **air** CE ~0.015 °C / 1%, cap 2 °C, not LST | FortyGuard is 2 m air. Du et al. 2024. |
+| 2026-08 | Analyze must not wait on enrich, OSM, or LLM | Heatmap is the product; extras fail-open. |
+| 2026-08-21 | LLM brief **after** satellite + SVI | First brief with nulls refused EPA/i-Tree recs. |
+| 2026-08-21 | DeepSeek **flash**, not `deepseek-chat` | This key only lists `deepseek-v4-flash` and `deepseek-v4-pro`. |
+
+---
+
+## What this is / is not
+
+**Is:** Track 1 urban-planner simulator. Score a US district on FortyGuard **2 m air** tiles, then estimate extra tree canopy with a **labeled literature overlay**. 2D is the scorecard. 3D is pitched OSM massing + heat. UI name HeatCast; folder `heatlens`.
+
+**Is not:**
+
+| Tempting | Why not |
+|---|---|
+| Walking / cool routes / A→B | Not our product |
+| India / non-US AOIs | FG heatmap is US-only |
+| “FortyGuard simulated adding trees” | No what-if heatmap. Slider does not recall FG |
+| HeatHall / data-center flood screener | Superseded pivot |
+| Photoreal shade / facade CFD | OSM boxes + SunCalc ≠ FG-measured shade |
+| Official cooling-center map | OSM amenities only |
 
 ---
 
 ## Demo cities and dates
 
-API is USA-only. Presets in `api/app/cities.py`:
+Presets in `api/app/cities.py`:
 
-| District | `city_id` | Date / time | Notes |
-|---|---|---|---|
-| Houston EaDo | `houston-eado` | **2024-07-15 15:00** | Default. Hotter fabric, construction / outdoor-work story. Threshold 35 °C. |
-| Houston Museum District | `houston-museum` | same | Greener contrast tract. Same day. |
-| Phoenix Downtown | `phoenix-downtown` | **2024-07-15 15:00** | Historic summer **only**. Threshold 38 °C. |
+| District | `city_id` | Date / time | Threshold | Notes |
+|---|---|---|---|---|
+| Houston EaDo | `houston-eado` | **2024-07-15 15:00** | 35 °C | Default story: hotter fabric / outdoor work |
+| Houston Museum District | `houston-museum` | same | 35 °C | Greener contrast, same day |
+| Phoenix Downtown | `phoenix-downtown` | **2024-07-15 15:00** | 38 °C | Historic summer only |
 
-**Phoenix `2026-08-17` can complete with 0 tiles and still be billed.** Treat that as a coverage miss, never as 0 °C. Failed FG tasks are free; **empty successful heatmaps still cost**. Cache key is AOI + datetime + analytic_type.
+**Phoenix `2026-08-17`:** 0 tiles + still billed. Coverage miss, never 0 °C.
+
+AOI: closed polygon, **≤ 45 mi²**, centroid in the US. Granularity **100 m**.
 
 ---
 
-## Architecture
+## Architecture (where to edit)
 
 ```
-heatlens/
-  api/          FastAPI — FortyGuard client, cache, scoring, memo
-  web/          Next.js 16 + MapLibre 6 — planner UI
-  RESEARCH-*.md product / API lock notes
+api/app/main.py          routes
+api/app/memo.py          template + DeepSeek brief, compact_context
+api/app/scenario.py      canopy overlay (air CE)
+api/app/svi.py           CDC SVI 2022
+api/app/buildings.py     OSM footprints
+api/app/cooling.py       OSM cooling-ish sites
+api/app/overpass.py      mirrors, caps
+api/app/cache.py         disk cache (gitignored)
+api/app/fg.py            heatmap wrap, class percents
+api/fortyguard/client.py vendored SDK + 403 status retry
+web/src/app/page.tsx     Score, brief refresh, layer chrome
+web/src/components/HeatMap.tsx   map (fragile)
+web/src/lib/shade.ts     SunCalc degrees
+web/src/lib/api.ts       fetch timeouts
 ```
 
-- **Key stays on the server.** `api/.env` → `FORTYGUARD_API_KEY`. Never `NEXT_PUBLIC_*`. The Next app talks only to `http://localhost:8000`.
-- Optional: `LLM_API_KEY` or `OPENAI_API_KEY` for the planner brief; else a template paragraph.
-- Vendored client: `api/fortyguard/` (copied/adapted from the official SDK).
-- **`D:\fortyguard\temperature-api-quickstart` is reference only** (notebooks, parcel examples, schema). Do not ship that fork as the product. Do not point the UI at it.
+`D:\fortyguard\temperature-api-quickstart` is **reference only**. Do not point the UI at it.
 
-Disk cache: `api/cache/*.json`. Outputs (heat-intelligence PDFs): `api/outputs/`. Both are local; Render’s filesystem is ephemeral if you deploy there.
+Disk: `api/cache/*.json`, `api/outputs/` — local only; Render disk is ephemeral.
 
 ---
 
-## Endpoints we actually use
+## Endpoints
 
-HeatCast FastAPI (`api/app/main.py`):
+HeatCast FastAPI:
 
-| Method | Path | Purpose |
+| Method | Path | Notes |
 |---|---|---|
-| GET | `/health` | Liveness |
-| GET | `/v1/cities` | Presets + scenario model meta |
-| POST | `/v1/analyze` | TCM heatmap + exceedance + scorecard + memo (heatmap must not wait on enrich) |
-| POST | `/v1/enrich` | Hotspot extras — 20 s timeout each, parallel, fail-open |
-| GET | `/v1/buildings` | OSM Overpass footprints |
-| GET | `/v1/weather` | Open-Meteo rain + FEMA chip + USGS elevation |
-| POST | `/v1/scenario` | Literature ΔT without re-running FG |
-| GET | `/v1/credits` | Key usage (stripped of secrets) |
-| GET | `/v1/outputs/{file}` | Heat-intelligence PDF download |
+| GET | `/health` | |
+| GET | `/v1/cities` | |
+| GET | `/v1/geocode` | Nominatim US |
+| POST | `/v1/analyze` | TCM + exceedance + **template** memo (`use_llm=False`) |
+| POST | `/v1/brief` | LLM after layers land |
+| POST | `/v1/enrich` | Core satellite+env 45 s; extras 12 s; do not `wait=True` on the pool |
+| POST | `/v1/svi` | |
+| GET | `/v1/buildings` `/v1/cooling` `/v1/osm` | Empty FC + `meta.error` on failure |
+| GET | `/v1/weather` | Open-Meteo + FEMA + elevation |
+| POST | `/v1/scenario` | Overlay math only |
+| GET | `/v1/credits` | |
+| GET | `/v1/outputs/{file}` | PDF |
 
-FortyGuard Premium (server-side only):
+FortyGuard: `tcm` snapshot °C (`average_temperature` often, mapped to `temperature`); `exceedance` hours in `properties.value`; `environmental_parameters` ~1 km; `satellite_segmentation` class mix at **hotspot centroid** (not a district NLCD raster); streetview often times out; heat_intelligence PDF.
 
-| Call | Role | Honesty |
-|---|---|---|
-| `create_heatmap` `analytic_type=tcm` | Snapshot °C polygons (`average_temperature` / min / max) | 100 m, filter_type=1, hour from UI |
-| `create_heatmap` `analytic_type=exceedance` | Hours above threshold (`properties.value`) | Duration story. `direction=above` |
-| `environmental_parameters` | Wet-bulb, apparent temp, RH, precip at a **point** | Coarse (~1 km). `heat_index_celsius` is **not** duration |
-| `satellite_segmentation` | Land-cover class mix at hotspot | `tree`/`plant` ≈ canopy; not a canopy raster for the whole AOI |
-| `street_view_segmentation` | Ground-level class mix | Often **times out**; never block analyze |
-| `heat_intelligence` | PDF report | Saved under `api/outputs/` |
-
-Non-FG:
-
-- **Open-Meteo** archive/forecast precip — rain chip, not a hydro model.
-- **OSM Overpass** buildings — 3D massing; default height 9 m if untagged.
-- **FEMA NFHL** flood zone — chip only.
-- **USGS 3DEP EPQS** — one elevation point.
+Client timeouts (`web/src/lib/api.ts`): enrich **80 s**, brief **50 s**, cooling **55 s**, buildings **70 s**.
 
 ---
 
-## Tree slider (must stay labeled)
+## Tree slider
 
-`api/app/scenario.py` / UI “Add trees (model)”:
+`api/app/scenario.py` + `web/src/lib/scenario.ts`:
 
-- **+10% / +20% canopy** (percentage points), current + added capped at 80%.
-- ΔT band **0.10–0.20 °C per +10% canopy**, central 0.15 °C / 10%, **cap 2 °C**.
-- Map overlay = existing GeoJSON temperatures minus ΔT. **Not a new FortyGuard heatmap.**
+- +10% / +20% canopy (percentage points); current + added capped at 80%; extra capped at 40 points.
+- ΔT **0.10–0.20 °C per +10%**, central **0.015 °C per 1%**, **cap 2 °C**.
+- Map overlay = existing GeoJSON °C minus ΔT. **Not a new FG heatmap.**
 - Hours saved is a fraction of exceedance hours, not a second FG run.
 
-UI copy already says this. Do not weaken it for the video.
+---
+
+## Map interaction (current)
+
+- **Pan:** left-drag pan; right/Ctrl-drag orbit around AOI.
+- **Draw:** left-drag box; Space pans; scroll zooms.
+- **Orbit:** left-drag orbit; Space/middle pan.
+- **Flat vs 3D heat:** 3D extrudes OSM buildings when loaded.
+- Search: selecting a hit must **not** re-geocode (`skipGeocode`). Escape/blur closes the list.
+
+SunCalc **v2** returns **degrees**, azimuth clockwise from north. Houston 15:00 15 Jul ≈ sun altitude **~68°**, shadows **~4 m**. Treating that as radians produced `Sun 3871°` and negative lengths.
 
 ---
 
-## How to run (both servers)
+## Do not regress (hard-won)
 
-API key in `heatlens/api/.env` as `FORTYGUARD_API_KEY` (gitignored).
+1. Heat fill = canvas raster → MapLibre **image** source `heatcast-raster`. Never redraw heat polygons on every `render`.
+2. Do not `flyTo` on every AOI drag. Scroll zoom always on. Draw = left-drag. Space pans.
+3. Cyan AOI mask = **SVG quad** from four `map.project` corners.
+4. MapLibre fill/line layers do **not** reliably show. SVI and shade = **SVG**. Isolines **burned into** the heat canvas. Cooling = **Marker**.
+5. Native `dragRotate` slides heat off-screen. Orbit with `easeTo({ around })`. `jumpTo` **ignores** `around`.
+6. OSM layer switches stay **enabled** when `analysis` exists even if Overpass is empty; show ellipsis while loading. Overpass **502 → empty FC**, not a failed Score.
+7. Do not put `FORTYGUARD_API_KEY` or `LLM_API_KEY` in the frontend.
+8. First `/v1/status` **403** after create_heatmap can mean “not ready” — retry like the official quickstart (`api/fortyguard/client.py`).
+9. TCM property is often `average_temperature`, not `temperature`. Exceedance hours are `value`, not °C.
+10. 0 tiles + completed `activity_id` = coverage miss, not 0 °C.
+11. Do not wait on streetview / heat-intelligence for the enrich HTTP response to return satellite buckets.
+
+Older note (partially superseded): legend vs blank MapLibre **fill** was fixed by abandoning fill layers for heat and using the canvas raster. If heat is blank again, check the image source, not a GeoJSON fill under buildings.
+
+---
+
+## How to run
 
 ```powershell
 cd D:\fortyguard\heatlens
 .\.venv\Scripts\activate
 cd api
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ```powershell
@@ -128,72 +239,43 @@ cd D:\fortyguard\heatlens\web
 npm run dev
 ```
 
-Open http://localhost:3000. Score **Houston EaDo** or **Museum District** on **2024-07-15 15:00**. Analyze does not wait for enrich.
+`api/.env`: `FORTYGUARD_API_KEY`, optional DeepSeek:
+
+```
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-v4-flash
+```
+
+Tests: `python -m unittest discover -s tests -v` from `api/` with the venv.
 
 ---
 
-## Known bugs / gotchas
+## Judging rubric
 
-1. **Heatmap fill vs legend (high priority).** Legend and hotspot marker are React (`activeHeat.features.length`, HTML `<Marker>`). They can show “FortyGuard °C · 273 tiles” + a 37 °C pin while MapLibre **fill is blank**. Causes seen in this repo: GeoJSON sources baked into `mapStyle` as empty collections then `setData` (react-map-gl style diffs can wipe data); fill sitting under raster or under 3D buildings; interpolate ramps that collapse a 34.7–36.9 °C payload into one muddy color; Carto dark / OpenFreeMap vector basemaps failing. **Current fix (shipped in `web/src/components/HeatMap.tsx`):** raster-only style (Carto `light_all`, Esri fallback); `<Source>` / `<Layer>` choropleth **above** the raster; per-payload yellow→red stretch; opacity ~0.72; tile outlines; `fitBounds` to AOI; when pitched, 5 m heat slabs so buildings do not fully hide the carpet. Re-check Museum District + Snapshot °C after a refresh.
-2. **Enrich timeouts** — streetview especially. Analyze must stay fast; enrich is background chips.
-3. **Blank basemaps** — OpenFreeMap vectors and Carto dark were unreliable. Use Carto raster light; Esri World Street Map if Carto errors.
-4. **Coverage miss** — 0 tiles with a completed activity_id is not 0 °C. Phoenix 2026-08-17 is the textbook case.
-5. **TCM property names** — tiles often have `average_temperature`, not `temperature`. Scoring and the map mapper copy that to `temperature`. Exceedance uses `value` as hours, not °C.
-6. **3D heights** — OSM `height` / `building:levels` are sparse in Houston. Assumed 9 m is labeled. Do not claim FG shade.
+[Hackathon’26](https://www.fortyguard.com/hackathon26): Impact 40 · Tech 35 · Innovation 15 · Communication 10.
 
----
-
-## Judging and submission
-
-Rubric ([Hackathon’26](https://www.fortyguard.com/hackathon26)):
-
-| Criterion | Weight |
-|---|---|
-| Impact | 40 |
-| Tech | 35 |
-| Innovation | 15 |
-| Communication | 10 |
-
-Practical checklist:
-
-- Add **Hackathon-FG** as a GitHub collaborator on the submission repo.
-- **Live demo** (no login). Cache EaDo + Museum + Phoenix 2024-07-15 so judging is not a live credit lottery.
-- **~3 min video.**
-- **~500 word summary.**
-- Keep FortyGuard **central** (activity_ids on the confidence strip). Overlay is the innovation, honestly labeled.
-
-Pitch angle: hours above threshold on a real district, greener control tract the same day, slider that does **not** pretend to be FG.
+Live demo, no login. Cache the demo AOIs. Video ~3 min. Summary ~500 words. FortyGuard **central** (activity_ids). Overlay honestly labeled.
 
 ---
 
 ## Links
 
 - API docs: https://docs-api.fortyguard.com
-- Create heatmap: https://docs-api.fortyguard.com/docs/create-heatmap
-- Limitations / billing: https://docs-api.fortyguard.com/docs/limitations
-- Dashboard (keys, usage): FortyGuard dashboard (team login)
+- Heatmap: https://docs-api.fortyguard.com/docs/create-heatmap
+- Limits / billing: https://docs-api.fortyguard.com/docs/limitations
 - Hackathon: https://www.fortyguard.com/hackathon26
-- Slack: **fortyguardhackthon26** (spelling as on the invite)
-- Team: **FG-141 · HumanSlop**
+- Slack: **fortyguardhackthon26** (invite spelling)
+- GitHub: https://github.com/Galabavamsi/heatcast
 
 ---
 
-## Research files (read in this order)
+## Research files
 
 | File | Role |
 |---|---|
-| `RESEARCH-3D-URBAN.md` | **Current product lock** — Track 1 HeatCast, 2D scorecard + OSM 3D, no walking routes |
-| `RESEARCH-SIMULATOR.md` | API + scenario formula lock (ΔT band, rain, endpoints) |
-| `RESEARCH-PIVOT.md` | **Superseded hero** (HeatHall / Track 3). Keep FG calling rules and date discipline only |
+| `RESEARCH-3D-URBAN.md` | Current product lock |
+| `RESEARCH-SIMULATOR.md` | API + scenario formula |
+| `RESEARCH-PIVOT.md` | Superseded HeatHall hero; keep FG date/cache rules |
 
----
-
-## What’s next (before 30 Aug)
-
-1. **Confirm visible choropleth** on Museum District and EaDo (this fill fix). If still blank, inspect DevTools: `heat-tiles` source feature count vs legend.
-2. **LLM key hook** — `LLM_API_KEY` / `OPENAI_API_KEY` in `api/.env` so the planner brief is not always the template. Cite-or-silence only.
-3. **3D shadows optional** — suncalc + extruded massing on a **known-height pad**. Do not claim sidewalk shade or FG-measured shade.
-4. **Cache copy for judging** — freeze `api/cache` for EaDo, Museum, Phoenix `2024-07-15` TCM + exceedance so the live demo does not re-bill or miss coverage.
-5. Video + 500-word writeup + add Hackathon-FG collaborator.
-
-Do not expand into India, routing, or a second product.
+If handover and research disagree, **fix research or add a Decision row** — do not leave two truths.

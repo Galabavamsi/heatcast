@@ -122,7 +122,7 @@ export async function enrichHotspot(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: opts?.signal ?? AbortSignal.timeout(25_000),
+    signal: opts?.signal ?? AbortSignal.timeout(80_000),
   });
   return parse<EnrichResponse>(res);
 }
@@ -130,6 +130,29 @@ export async function enrichHotspot(
 export function pdfUrl(path: string) {
   if (path.startsWith("http")) return path;
   return `${API_URL}${path}`;
+}
+
+export async function writeBrief(payload: {
+  city?: string | null;
+  scorecard: AnalyzeResponse["scorecard"];
+  rain?: AnalyzeResponse["rain"];
+  flood?: AnalyzeResponse["flood"];
+  scenario?: AnalyzeResponse["scenario"];
+  coverage_miss?: boolean;
+  satellite_buckets?: NonNullable<EnrichResponse["satellite"]>["buckets"];
+  streetview_classes?: Record<string, number> | null;
+  svi?: Record<string, unknown> | null;
+  cooling?: { count?: number; note?: string } | null;
+  shade?: { altitudeDeg?: number; shadowM?: number | null; night?: boolean } | null;
+  activity_ids?: Record<string, unknown> | null;
+}) {
+  const res = await fetch(`${API_URL}/v1/brief`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(50_000),
+  });
+  return parse<{ text: string; source: string; model: string | null }>(res);
 }
 
 export async function fetchSvi(payload: {

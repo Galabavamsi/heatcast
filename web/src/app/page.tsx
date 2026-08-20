@@ -11,6 +11,7 @@ import {
   getWeather,
   pdfUrl,
   searchPlaces,
+  writeBrief,
   type PlaceHit,
 } from "@/lib/api";
 import {
@@ -102,7 +103,9 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [guideStep, setGuideStep] = useState<number | null>(0);
+  const [memoBusy, setMemoBusy] = useState(false);
   const skipGeocode = useRef(false);
+  const briefSeq = useRef(0);
 
   useEffect(() => {
     try {
@@ -154,6 +157,86 @@ export default function Home() {
     }
     return out;
   }, [cooling]);
+
+  const briefInputs = useRef({ analysis, enrichment, svi, cooling, shade });
+  briefInputs.current = { analysis, enrichment, svi, cooling, shade };
+  const activityId = analysis?.confidence?.activity_id ?? null;
+  const satKey = enrichment?.satellite?.buckets
+    ? `${enrichment.satellite.buckets.canopy_pct}:${enrichment.satellite.buckets.impervious_pct}`
+    : enrichment
+      ? "empty"
+      : "pending";
+  const sviKey = svi?.summary
+    ? `${svi.summary.tract_count}:${svi.summary.max_svi}`
+    : sviBusy
+      ? "pending"
+      : "none";
+  const coolKey = String(cooling?.meta?.count ?? (coolingBusy ? "pending" : "none"));
+  const shadeKey = shade?.meta
+    ? `${Math.round(shade.meta.altitudeDeg)}:${shade.meta.shadowM ?? "n"}`
+    : "none";
+
+  useEffect(() => {
+    if (!activityId || enrichBusy || sviBusy) return;
+    const current = briefInputs.current.analysis;
+    const enrich = briefInputs.current.enrichment;
+    const sviData = briefInputs.current.svi;
+    const cool = briefInputs.current.cooling;
+    const shadeData = briefInputs.current.shade;
+    if (!current) return;
+    const seq = ++briefSeq.current;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setMemoBusy(true);
+        try {
+          const doc = await writeBrief({
+            city: current.place_name || current.city?.name,
+            scorecard: current.scorecard,
+            rain: current.rain,
+            flood: current.flood,
+            scenario: current.scenario,
+            coverage_miss: current.coverage_miss,
+            satellite_buckets: enrich?.satellite?.buckets,
+            streetview_classes: enrich?.streetview?.classes_percent ?? null,
+            svi: sviData?.summary
+              ? {
+                  tract_count: sviData.summary.tract_count,
+                  max_svi: sviData.summary.max_svi,
+                  mean_svi: sviData.summary.mean_svi,
+                  highest_svi_name: sviData.summary.highest_svi_name,
+                  high_svi_hottest_third: sviData.summary.high_svi_hottest_third,
+                  planner_sentence: sviData.summary.planner_sentence,
+                }
+              : null,
+            cooling: cool?.meta?.count
+              ? { count: cool.meta.count, note: cool.meta.note }
+              : null,
+            shade: shadeData?.meta
+              ? {
+                  altitudeDeg: shadeData.meta.altitudeDeg,
+                  shadowM: shadeData.meta.shadowM,
+                  night: shadeData.meta.night,
+                }
+              : null,
+            activity_ids: current.activity_ids,
+          });
+          if (seq !== briefSeq.current) return;
+          setAnalysis((prev) =>
+            prev && prev.confidence?.activity_id === activityId
+              ? { ...prev, memo: doc.text, memo_meta: { source: doc.source, model: doc.model } }
+              : prev,
+          );
+        } catch {
+          /* keep the template snapshot from analyze */
+        } finally {
+          if (seq === briefSeq.current) setMemoBusy(false);
+        }
+      })();
+    }, 700);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activityId, enrichBusy, sviBusy, satKey, sviKey, coolKey, shadeKey]);
 
   const comfort = analysis?.comfort ?? weather?.comfort ?? null;
 
@@ -263,6 +346,8 @@ export default function Home() {
     }
     setBusy("analyze");
     setError(null);
+    briefSeq.current += 1;
+    setMemoBusy(false);
     try {
       const result = await analyzeDistrict({
         bbox: aoi,
@@ -574,10 +659,13 @@ export default function Home() {
               live={liveScenario}
             />
           )}
-          {analysis?.memo && !analysis.memo.trim().startsWith("{") && (
+          {(analysis?.memo || memoBusy) && (
             <section className="rounded-lg border border-[#2a313c] bg-[#0b0d10] p-3 text-xs leading-relaxed text-slate-300">
               <h3 className="mb-1 text-[10px] uppercase tracking-wide text-cyan-400">Planner brief</h3>
-              {analysis.memo}
+              {memoBusy && (
+                <p className="mb-2 text-[10px] text-cyan-400/80">Updating with satellite and SVI…</p>
+              )}
+              {analysis?.memo && !analysis.memo.trim().startsWith("{") ? analysis.memo : null}
             </section>
           )}
           {analysis && <ConfidenceStrip analysis={analysis} />}
@@ -1181,6 +1269,16 @@ function ConfidenceStrip({ analysis }: { analysis: AnalyzeResponse }) {
   );
 }
 
+function blockingEnrichErrors(enrichment: EnrichResponse | null): Array<[string, string]> {
+  if (!enrichment?.errors) return [];
+  const hasCore = Boolean(enrichment.satellite || enrichment.env_params);
+  return Object.entries(enrichment.errors).filter(([name]) => {
+    if (name === "streetview" || name === "heat_intelligence") return false;
+    if (name === "enrich" && hasCore) return false;
+    return true;
+  });
+}
+
 function HotspotPanel({
   hotspot,
   enrichment,
@@ -1200,9 +1298,9 @@ function HotspotPanel({
         {hotspot.temperature_c == null ? "no tile" : `${hotspot.temperature_c.toFixed(1)}°C`}
       </p>
       {busy && <p className="text-xs text-slate-500">Loading site context…</p>}
-      {enrichment?.errors && (
+      {blockingEnrichErrors(enrichment).length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {Object.entries(enrichment.errors).map(([name, msg]) => (
+          {blockingEnrichErrors(enrichment).map(([name, msg]) => (
             <span key={name} className="rounded-full bg-rose-950/80 px-2 py-0.5 text-[10px] text-rose-100/90" title={msg}>
               {msg}
             </span>
