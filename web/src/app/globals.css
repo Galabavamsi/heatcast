@@ -1,0 +1,70 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+:root {
+  --ink: #0b0d10;
+  --panel: #161a20;
+  --line: #2a313c;
+  --mute: #8b95a5;
+  --text: #e8edf4;
+  --accent: #3dd6c6;
+  --background: var(--ink);
+  --foreground: var(--text);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.maplibregl-map {
+  background: #0b0d10;
+}
+
+.maplibregl-canvas {
+  outline: none;
+}
+
+.maplibregl-ctrl-group {
+  background: #161a20ee !important;
+  border: 1px solid #2a313c;
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group button {
+  background: transparent !important;
+  border-color: #2a313c !important;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: #2a313c !important;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: transparent !important;
+  color: #8b95a5 !important;
+}
+
+.heatcast-progress {
+  transition: width 700ms ease;
+}
+
+.heatcast-glass {
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, white 8%, transparent);
+}
