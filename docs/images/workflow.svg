@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="220" viewBox="0 0 960 220" role="img">
+  <rect width="960" height="220" rx="16" fill="#0b0d10"/>
+  <rect x="1" y="1" width="958" height="218" rx="15" fill="none" stroke="#2a313c"/>
+  <text x="32" y="42" fill="#22d3ee" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" letter-spacing="3">WORKFLOW</text>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#e8edf4">
+    <rect x="32" y="70" width="150" height="88" rx="12" fill="#161a20" stroke="#22d3ee"/>
+    <text x="48" y="108">1. Search / draw</text>
+    <text x="48" y="130" fill="#94a3b8" font-size="12">US box under 45 mi²</text>
+    <text x="196" y="118" fill="#22d3ee" font-size="18">’</text>
+    <rect x="220" y="70" width="150" height="88" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="236" y="108">2. Pick hour</text>
+    <text x="236" y="130" fill="#94a3b8" font-size="12">2024-07-15 15:00</text>
+    <text x="384" y="118" fill="#22d3ee" font-size="18">’</text>
+    <rect x="408" y="70" width="150" height="88" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="424" y="108">3. Score area</text>
+    <text x="424" y="130" fill="#94a3b8" font-size="12">FortyGuard TCM</text>
+    <text x="572" y="118" fill="#22d3ee" font-size="18">’</text>
+    <rect x="596" y="70" width="150" height="88" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="612" y="108">4. Read layers</text>
+    <text x="612" y="130" fill="#94a3b8" font-size="12">SVI · shade · cooling</text>
+    <text x="760" y="118" fill="#22d3ee" font-size="18">’</text>
+    <rect x="784" y="70" width="144" height="88" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="800" y="108">5. Decide</text>
+    <text x="800" y="130" fill="#94a3b8" font-size="12">trees / pavement</text>
+  </g>
+</svg>

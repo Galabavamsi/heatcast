@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280" role="img" aria-labelledby="t d">
+  <title id="t">HeatCast job in one sentence</title>
+  <desc id="d">A planner draws a US neighborhood, scores FortyGuard air heat, then decides where trees, shade, and cooling sites matter most.</desc>
+  <rect width="960" height="280" rx="16" fill="#0b0d10"/>
+  <rect x="1" y="1" width="958" height="278" rx="15" fill="none" stroke="#2a313c"/>
+  <text x="32" y="48" fill="#22d3ee" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" letter-spacing="3">WHO IT IS FOR</text>
+  <text x="32" y="88" fill="#e8edf4" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="700">Score a neighborhoods heat before you plant, pave, or stage outdoor work.</text>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif">
+    <rect x="32" y="120" width="280" height="120" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="52" y="152" fill="#22d3ee" font-size="12" letter-spacing="1.5">CITY PLANNER</text>
+    <text x="52" y="180" fill="#e8edf4" font-size="14">Which tract is hottest and</text>
+    <text x="52" y="200" fill="#94a3b8" font-size="14">also high social vulnerability?</text>
+    <rect x="340" y="120" width="280" height="120" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="360" y="152" fill="#22d3ee" font-size="12" letter-spacing="1.5">CONSTRUCTION PM</text>
+    <text x="360" y="180" fill="#e8edf4" font-size="14">How many hours is this pad</text>
+    <text x="360" y="200" fill="#94a3b8" font-size="14">at or above 35 °C on a July day?</text>
+    <rect x="648" y="120" width="280" height="120" rx="12" fill="#161a20" stroke="#2a313c"/>
+    <text x="668" y="152" fill="#22d3ee" font-size="12" letter-spacing="1.5">PUBLIC HEALTH / OEM</text>
+    <text x="668" y="180" fill="#e8edf4" font-size="14">Where are indoor public sites</text>
+    <text x="668" y="200" fill="#94a3b8" font-size="14">relative to the hottest tiles?</text>
+  </g>
+</svg>
