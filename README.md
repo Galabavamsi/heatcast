@@ -26,7 +26,13 @@ HeatCast answers one planner question:
 
 It is **not** a walking-route app, not sidewalk CFD, and not a FortyGuard “add trees and re-simulate” product. FortyGuard measures. HeatCast **scores a district** and layers public context on top.
 
-![City planner, construction PM, and public-health / OEM jobs HeatCast is built for](docs/images/who-its-for.svg)
+```mermaid
+flowchart LR
+  FG["FortyGuard measures<br/>~100 m 2 m air"] --> HC["HeatCast scores the district"]
+  HC --> P["Planner: where to plant / pave"]
+  HC --> C["Construction: hours ≥ 35 °C"]
+  HC --> H["OEM: indoor public sites in the box"]
+```
 
 | Person | Job they have | What HeatCast gives them |
 |---|---|---|
@@ -71,7 +77,13 @@ Museum District, **same date**, is the greener control tract (preset `houston-mu
 
 ## How a session works
 
-![Search or draw → pick hour → Score → read layers → decide](docs/images/workflow.svg)
+```mermaid
+flowchart LR
+  A["1. Search or draw<br/>US box under 45 mi²"] --> B["2. Pick hour<br/>2024-07-15 15:00"]
+  B --> C["3. Score area<br/>FortyGuard TCM"]
+  C --> D["4. Read layers<br/>SVI · shade · cooling"]
+  D --> E["5. Decide<br/>trees / pavement"]
+```
 
 1. **Search** a US city or neighborhood, or click **Draw area** and drag a box (Space pans, scroll still zooms). Stay under **45 mi²**.
 2. Leave **date 2024-07-15** and **hour 15:00** for the demo (historic summer; Phoenix 2026-08-17 can return 0 tiles and still bill).
@@ -83,7 +95,22 @@ Museum District, **same date**, is the greener control tract (preset `houston-mu
 
 ## Every control, what it is, why it is useful
 
-![Layer card: heat, exceedance, SVI, shade, cooling](docs/images/layers.svg)
+```mermaid
+flowchart TB
+  subgraph heat [FortyGuard]
+    T["Heat tiles · TCM °C"]
+    X["Exceedance · hours ≥ 35 °C"]
+  end
+  subgraph context [Public context]
+    S["SVI · CDC/ATSDR 2022"]
+    H["Shade · OSM + sun"]
+    C["Cooling · OSM libraries"]
+  end
+  T --> S
+  X --> S
+  T --> H
+  T --> C
+```
 
 ### Header
 

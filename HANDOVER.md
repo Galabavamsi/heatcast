@@ -58,7 +58,7 @@ HeatCast scores a **drawn US AOI** on FortyGuard TCM + exceedance, then overlays
 
 | Date | Who | What |
 |---|---|---|
-| 2026-08-21 | Vamsi / agent | README: screenshots + East Downtown worked example (who it’s for, every control, real 15:00 numbers). Images in `docs/images/`. |
+| 2026-08-21 | Vamsi / agent | GitHub README: replace SVG diagrams with mermaid (GitHub was showing broken-image alts). PNG screenshots stay. |
 | 2026-08-21 | Vamsi / agent | Brief after enrich: `POST /v1/brief`, compact LLM context, enrich two-phase + 80 s client timeout, FEMA 8 s, `HANDOVER.md` + README living docs. |
 | 2026-08-21 | Vamsi / agent | DeepSeek brief path (`thinking` disabled, 40 s). OSM fail-open, sequential load, shade SunCalc **degrees**. Search dropdown `skipGeocode`. GitHub `Galabavamsi/heatcast`. Status-poll **403 retry** in `api/fortyguard/client.py`. |
 | 2026-08-20 | Vamsi / agent | Initial HeatCast FastAPI + Next/MapLibre: AOI draw, TCM + exceedance, SVI, scenario overlay, 3D orbit. |
