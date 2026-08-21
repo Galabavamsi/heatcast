@@ -12,14 +12,16 @@ import requests
 log = logging.getLogger(__name__)
 
 SYSTEM = (
-    "You write a short urban-planning brief for HeatCast. "
-    "Use ONLY numbers in the JSON. Every factual clause must name its layer "
-    "(FortyGuard TCM, FortyGuard exceedance, FortyGuard satellite, CDC/ATSDR SVI 2022, "
-    "Open-Meteo, FEMA, OSM cooling sites, OSM building shade, scenario model). "
-    "The tree scenario is an estimated literature overlay, not a FortyGuard measurement. "
+    "You write a short urban-planning brief for HeatCast, a US neighborhood heat scorecard. "
+    "Use ONLY numbers in the JSON. Name layers by what they measure, not by vendor on every clause: "
+    "2 m air tiles, total hours above threshold, longest consecutive hot streak, satellite cover, "
+    "CDC/ATSDR SVI 2022, Open-Meteo, FEMA, OSM indoor sites, OSM building shade, canopy scenario model. "
+    "The tree scenario is a labeled literature overlay, not a new heatmap. "
     "If satellite canopy and impervious percents are present, use them: low canopy + high "
     "impervious supports EPA Heat Island cool pavement and USDA Forest Service i-Tree planting. "
     "If CDC/ATSDR SVI is present, name the highest-SVI tract and whether it sits in the hottest third. "
+    "If persistence (streak) hours are present, contrast them with total exceedance hours. "
+    "If unrelieved_heat_ratio is present, name it as a HeatCast index (longest streak ÷ total hours, 0–1), not a NIOSH table. "
     "If a field is absent from the JSON, skip it — do not list missing datasets or refuse "
     "recommendations solely because another layer is not in this payload. "
     "Do not invent CFD, sidewalk temperatures, flood depths, dollar savings, or cooling-center registries. "
@@ -98,17 +100,26 @@ def _template_memo(context: dict[str, Any]) -> str:
     coverage = context.get("coverage_miss")
     if coverage:
         return (
-            f"{city}: FortyGuard TCM completed with no tiles. That is a coverage miss, not 0 °C. "
+            f"{city}: heatmap completed with no tiles. That is a coverage miss, not 0 °C. "
             "Retry a historic summer date such as 2024-07-15 (Phoenix 2026-08-17 is a known empty window)."
         )
     hours = score.get("mean_hours_above")
     mean_c = score.get("mean_c")
     thresh = score.get("threshold_c")
+    streak = score.get("mean_streak_hours")
+    uhr = score.get("unrelieved_heat_ratio")
+    if uhr is None and isinstance(score.get("unrelieved"), dict):
+        uhr = score["unrelieved"].get("ratio")
     hour_bit = (
-        f"FortyGuard exceedance: mean {hours} h at or above {thresh} °C."
+        f"Tiles spend a mean {hours} h at or above {thresh} °C"
+        + (f"; longest consecutive streak averages {streak} h." if streak is not None else ".")
         if hours is not None
-        else f"FortyGuard TCM peak-hour mean {mean_c} °C (duration layer pending)."
+        else f"Peak-hour mean {mean_c} °C (duration layer pending)."
     )
+    if uhr is not None:
+        hour_bit += (
+            f" Unrelieved-heat ratio {uhr} (HeatCast index: longest streak ÷ total hours above threshold, 0–1)."
+        )
     rain_mm = rain.get("daily_precip_mm")
     rain_bit = (
         f" Open-Meteo daily precip {rain_mm} mm (grid-scale rain context, not a hydro model)."
@@ -120,7 +131,7 @@ def _template_memo(context: dict[str, Any]) -> str:
     cover_bit = ""
     if canopy is not None or imp is not None:
         cover_bit = (
-            f" FortyGuard satellite at the hotspot: canopy {canopy if canopy is not None else '—'}%, "
+            f" Satellite at the hotspot: canopy {canopy if canopy is not None else '—'}%, "
             f"impervious {imp if imp is not None else '—'}%."
         )
     delta = scenario.get("estimated_delta_c") or 0
@@ -129,14 +140,14 @@ def _template_memo(context: dict[str, Any]) -> str:
         lo = (scenario.get("estimated_delta_c_range") or {}).get("low")
         hi = (scenario.get("estimated_delta_c_range") or {}).get("high")
         scene_bit = (
-            f" Scenario model (not FG): +{scenario.get('canopy_delta_pct')}% canopy estimates "
-            f"ΔT {delta} °C (range {lo}–{hi} °C)"
+            f" Canopy scenario (literature overlay, not a new heatmap): +{scenario.get('canopy_delta_pct')}% "
+            f"estimates ΔT {delta} °C (range {lo}–{hi} °C)"
             + (f", ~{saved} h fewer above threshold." if saved is not None else ".")
         )
     else:
         scene_bit = (
-            " No extra canopy in this run. Use the +10% / +20% slider for a labeled literature overlay; "
-            "FortyGuard will not recompute a heatmap."
+            " No extra canopy in this run. Use +10% / +20% for a labeled overlay; "
+            "the temperature tiles are not recomputed."
         )
     flood = context.get("flood") or {}
     flood_bit = ""
@@ -146,7 +157,7 @@ def _template_memo(context: dict[str, Any]) -> str:
     if canopy is not None and imp is not None:
         rec_bit = (
             " If canopy is thin and pavement is high, EPA Heat Island cool pavement and USDA "
-            "Forest Service i-Tree planting are the next checks — not a new FortyGuard heatmap."
+            "Forest Service i-Tree planting are the next checks."
         )
     svi = context.get("svi") or {}
     svi_bit = ""
@@ -162,8 +173,8 @@ def _template_memo(context: dict[str, Any]) -> str:
             "(not an official cooling-center registry)."
         )
     return (
-        f"{city} snapshot: FortyGuard TCM mean {mean_c} °C, max {score.get('max_c')} °C. "
+        f"{city} snapshot: mean {mean_c} °C, max {score.get('max_c')} °C. "
         f"{hour_bit}{rain_bit}{cover_bit}{svi_bit}{scene_bit}{flood_bit}{rec_bit}{cool_bit} "
         "Tiles are ~100 m neighborhood UHI, not sidewalk CFD. Prioritize street trees and shade "
-        "on the hottest tiles."
+        "on the hottest tiles, and indoor cool space within a short walk of the hotspot."
     )

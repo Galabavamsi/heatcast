@@ -63,7 +63,11 @@ def _normalize_geometry(geom: Any) -> dict[str, Any] | None:
     return None
 
 
-def slim_heatmap(features: list[dict[str, Any]], max_features: int = 1800) -> dict[str, Any]:
+def slim_heatmap(
+    features: list[dict[str, Any]],
+    max_features: int = 1800,
+    extra_keys: tuple[str, ...] = (),
+) -> dict[str, Any]:
     step = max(1, len(features) // max_features) if len(features) > max_features else 1
     slim = []
     for ft in features[::step]:
@@ -85,6 +89,10 @@ def slim_heatmap(features: list[dict[str, Any]], max_features: int = 1800) -> di
         if hours is not None:
             out_props["hours"] = round(hours, 4)
             out_props["value"] = round(hours, 4)
+        for key in extra_keys:
+            num = _as_float(props.get(key))
+            if num is not None:
+                out_props[key] = round(num, 4)
         slim.append({"type": "Feature", "geometry": geom, "properties": out_props})
     return {"type": "FeatureCollection", "features": slim}
 

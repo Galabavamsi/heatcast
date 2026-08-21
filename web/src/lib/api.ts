@@ -5,6 +5,7 @@ import type {
   CoolingResponse,
   EnrichResponse,
   SviResponse,
+  WalkRoute,
   WeatherResponse,
 } from "./types";
 
@@ -62,18 +63,22 @@ export type PlaceHit = {
 export async function analyzeDistrict(payload: {
   start_date: string;
   start_time: string;
+  end_date?: string | null;
   bbox?: [number, number, number, number];
   name?: string;
   city_id?: string;
   threshold_c?: number;
   include_exceedance?: boolean;
+  include_persistence?: boolean;
   canopy_delta_pct?: number;
   current_canopy_pct?: number | null;
 }) {
+  const body: Record<string, unknown> = { ...payload };
+  if (!body.end_date) delete body.end_date;
   const res = await fetch(`${API_URL}/v1/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   return parse<AnalyzeResponse>(res);
 }
@@ -92,6 +97,24 @@ export async function getBuildings(bbox: [number, number, number, number]) {
     signal: AbortSignal.timeout(70_000),
   });
   return parse<BuildingsResponse>(res);
+}
+
+export async function getWalk(
+  fromLon: number,
+  fromLat: number,
+  toLon: number,
+  toLat: number,
+) {
+  const qs = new URLSearchParams({
+    from_lon: String(fromLon),
+    from_lat: String(fromLat),
+    to_lon: String(toLon),
+    to_lat: String(toLat),
+  });
+  const res = await fetch(`${API_URL}/v1/walk?${qs}`, {
+    signal: AbortSignal.timeout(12_000),
+  });
+  return parse<WalkRoute>(res);
 }
 
 export async function getCooling(bbox: [number, number, number, number]) {

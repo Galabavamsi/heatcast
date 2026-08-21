@@ -43,6 +43,12 @@ const RAMP: [number, [number, number, number]][] = [
   [1, [127, 29, 29]],
 ];
 
+const DIVERGING_RAMP: [number, [number, number, number]][] = [
+  [0, [37, 99, 235]],
+  [0.5, [248, 250, 252]],
+  [1, [220, 38, 38]],
+];
+
 type LngLat = [number, number];
 type BBox = [LngLat, LngLat];
 type ImageCorners = [LngLat, LngLat, LngLat, LngLat];
@@ -179,7 +185,7 @@ function asCollection(raw: unknown): FeatureCollection {
     const geom = normalizeGeometry(ft.geometry, swap);
     if (!geom) continue;
     const props = { ...(ft.properties || {}) };
-    const temp = numProp(props, TEMP_KEYS);
+    const temp = numProp(props, TEMP_KEYS) ?? numProp(props, ["delta_c"]);
     const hours = numProp(props, ["hours", "hours_above"]);
     const valueOnly = temp == null ? numProp(props, ["value"]) : null;
     if (temp != null) props.temperature = temp;
@@ -197,6 +203,19 @@ function asCollection(raw: unknown): FeatureCollection {
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function divergingDomain(fc: FeatureCollection): { min: number; max: number } | null {
+  const vals: number[] = [];
+  for (const ft of fc.features) {
+    const n =
+      numProp(ft.properties as Record<string, unknown>, TEMP_KEYS) ??
+      numProp(ft.properties as Record<string, unknown>, ["delta_c"]);
+    if (n != null) vals.push(n);
+  }
+  if (!vals.length) return null;
+  const absMax = Math.max(...vals.map((v) => Math.abs(v)), 0.25);
+  return { min: -absMax, max: absMax };
 }
 
 function domainOf(fc: FeatureCollection, key: "temperature" | "hours"): { min: number; max: number } | null {
@@ -271,12 +290,12 @@ function mercatorY(lat: number): number {
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 }
 
-function rampColor(t: number): [number, number, number] {
+function rampColor(t: number, ramp: typeof RAMP = RAMP): [number, number, number] {
   const x = Math.max(0, Math.min(1, t));
   let i = 0;
-  while (i < RAMP.length - 2 && x > RAMP[i + 1][0]) i += 1;
-  const [t0, c0] = RAMP[i];
-  const [t1, c1] = RAMP[i + 1];
+  while (i < ramp.length - 2 && x > ramp[i + 1][0]) i += 1;
+  const [t0, c0] = ramp[i];
+  const [t1, c1] = ramp[i + 1];
   const u = (x - t0) / (t1 - t0 || 1);
   return [
     Math.round(c0[0] + (c1[0] - c0[0]) * u),
@@ -454,6 +473,7 @@ function paintHeatTiles(
   w: number,
   h: number,
   isolines?: FeatureCollection | null,
+  ramp: typeof RAMP = RAMP,
 ) {
   ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
@@ -466,7 +486,7 @@ function paintHeatTiles(
   for (const ft of fc.features) {
     const val = numProp(ft.properties as Record<string, unknown>, keys);
     const t = val == null ? 0.5 : (val - domain.min) / span;
-    const [r, g, b] = rampColor(t);
+    const [r, g, b] = rampColor(t, ramp);
     ctx.fillStyle = `rgba(${r},${g},${b},${FILL_ALPHA})`;
     if (!drawFeaturePath(ctx, ft.geometry, project)) continue;
     ctx.fill("evenodd");
@@ -482,6 +502,7 @@ function rasterizeHeat(
   domain: { min: number; max: number },
   reuse?: HTMLCanvasElement | null,
   isolines?: FeatureCollection | null,
+  ramp: typeof RAMP = RAMP,
 ): { canvas: HTMLCanvasElement; width: number; height: number } {
   const { w, h } = imageSizeFor(bounds);
   const canvas = reuse && reuse.width === w && reuse.height === h ? reuse : document.createElement("canvas");
@@ -492,7 +513,7 @@ function rasterizeHeat(
     const offscreen = new OffscreenCanvas(w, h);
     const offCtx = offscreen.getContext("2d");
     if (offCtx) {
-      paintHeatTiles(offCtx, fc, bounds, prop, domain, w, h, isolines);
+      paintHeatTiles(offCtx, fc, bounds, prop, domain, w, h, isolines, ramp);
       const dst = canvas.getContext("2d", { alpha: true });
       if (dst) {
         dst.clearRect(0, 0, w, h);
@@ -503,7 +524,7 @@ function rasterizeHeat(
   }
 
   const ctx = canvas.getContext("2d", { alpha: true });
-  if (ctx) paintHeatTiles(ctx, fc, bounds, prop, domain, w, h, isolines);
+  if (ctx) paintHeatTiles(ctx, fc, bounds, prop, domain, w, h, isolines, ramp);
   return { canvas, width: w, height: h };
 }
 
@@ -567,6 +588,7 @@ function volumeFeatures(
   fc: FeatureCollection,
   prop: "temperature" | "hours",
   domain: { min: number; max: number },
+  ramp: typeof RAMP = RAMP,
 ): FeatureCollection {
   const keys = prop === "hours" ? ([...HOURS_KEYS, ...TEMP_KEYS] as const) : TEMP_KEYS;
   const span = domain.max - domain.min || 1;
@@ -575,7 +597,7 @@ function volumeFeatures(
     features: fc.features.map((ft, i) => {
       const val = numProp(ft.properties as Record<string, unknown>, keys);
       const t = val == null ? 0.5 : (val - domain.min) / span;
-      const rgb = rampColor(t);
+      const rgb = rampColor(t, ramp);
       return {
         ...ft,
         id: ft.id ?? i,
@@ -634,6 +656,19 @@ function boxQuad(map: MapLibreMap, bbox: AoiBBox) {
 
 type SvgSviPath = { d: string; fill: string; opacity: number; fips: string; selected: boolean };
 type SvgLinePath = { d: string };
+type SvgWalk = {
+  points: string;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+};
+
+function isSportsCentre(site: CoolingSite) {
+  return /sport/i.test(site.kind) || /sport/i.test(site.kindKey ?? "");
+}
+
+function amenityKey(site: CoolingSite) {
+  return `${site.lon}:${site.lat}:${site.name}`;
+}
 
 function sviFillRgb(svi: number): [number, number, number] {
   const t = Math.max(0, Math.min(1, svi));
@@ -708,6 +743,19 @@ function projectSviOverlay(map: MapLibreMap, fc: FeatureCollection, selectedFips
     }
   }
   return out;
+}
+
+function projectWalkLine(map: MapLibreMap, coords: [number, number][]): SvgWalk | null {
+  const pts = coords.slice(0, 120).map(([lon, lat]) => {
+    const p = map.project([lon, lat]);
+    return { x: p.x, y: p.y };
+  });
+  if (pts.length < 2 || !pts[0] || !pts[pts.length - 1]) return null;
+  return {
+    points: pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "),
+    start: pts[0],
+    end: pts[pts.length - 1],
+  };
 }
 
 function projectShadeOverlay(map: MapLibreMap, fc: FeatureCollection): SvgLinePath[] {
@@ -1050,7 +1098,7 @@ function boundsKey(bounds: BBox | null): string {
   return bounds.flat().map((n) => n.toFixed(5)).join(":");
 }
 
-type HeatMode = "temp" | "hours";
+type HeatMode = "temp" | "hours" | "streak" | "delta" | "delta-edges";
 
 type Interaction = "pan" | "draw" | "orbit";
 
@@ -1136,6 +1184,13 @@ type Props = {
   shadeFc?: FeatureCollection | null;
   coolingVisible?: boolean;
   coolingSites?: CoolingSite[];
+  walkCoords?: [number, number][] | null;
+  walkVisible?: boolean;
+  walkDest?: CoolingSite | null;
+  plantedTrees?: Array<{ lon: number; lat: number }>;
+  plantMode?: boolean;
+  panelOpen?: boolean;
+  showDeltaLayers?: boolean;
   onAoiChange?: (bbox: AoiBBox) => void;
   onMapClick?: (pt: { lon: number; lat: number }) => void;
   onSviSelect?: (tract: SviTract | null) => void;
@@ -1162,6 +1217,13 @@ export default function HeatMap({
   shadeFc = null,
   coolingVisible = true,
   coolingSites = [],
+  walkCoords = null,
+  walkVisible = true,
+  walkDest = null,
+  plantedTrees = [],
+  plantMode = false,
+  panelOpen = true,
+  showDeltaLayers = false,
   onAoiChange,
   onMapClick,
   onSviSelect,
@@ -1178,13 +1240,30 @@ export default function HeatMap({
   const [gpuReset, setGpuReset] = useState(false);
   const [draftAoi, setDraftAoi] = useState<AoiBBox | null>(null);
   const [boxPx, setBoxPx] = useState<{ points: string; label: { x: number; y: number } } | null>(null);
-  const [overlaySvg, setOverlaySvg] = useState<{ svi: SvgSviPath[]; contours: SvgLinePath[]; shade: SvgLinePath[] }>({
+  const [overlaySvg, setOverlaySvg] = useState<{
+    svi: SvgSviPath[];
+    contours: SvgLinePath[];
+    shade: SvgLinePath[];
+    walk: SvgWalk | null;
+    amenityShift: string[];
+  }>({
     svi: [],
     contours: [],
     shade: [],
+    walk: null,
+    amenityShift: [],
   });
   const shadeFcRef = useRef<FeatureCollection>(EMPTY_FC);
   shadeFcRef.current = shadeFc ?? EMPTY_FC;
+  const walkCoordsRef = useRef<[number, number][] | null>(null);
+  walkCoordsRef.current = walkVisible ? walkCoords : null;
+  const coolingSitesRef = useRef(coolingSites);
+  coolingSitesRef.current = coolingSites;
+  const hotspotRef = useRef(analysis?.hotspot);
+  const coolingVisibleRef = useRef(coolingVisible);
+  coolingVisibleRef.current = coolingVisible;
+  const plantModeRef = useRef(plantMode);
+  plantModeRef.current = plantMode;
   const [sviPopup, setSviPopup] = useState<{
     lon: number;
     lat: number;
@@ -1202,6 +1281,15 @@ export default function HeatMap({
     const update = () => {
       const box = draftAoi ?? aoi;
       setBoxPx(box ? boxQuad(map, box) : null);
+      const hot = hotspotRef.current;
+      const amenityShift: string[] = [];
+      if (hot && coolingVisibleRef.current) {
+        const hp = map.project([hot.lon, hot.lat]);
+        for (const site of coolingSitesRef.current) {
+          const p = map.project([site.lon, site.lat]);
+          if (Math.hypot(p.x - hp.x, p.y - hp.y) < 40) amenityShift.push(amenityKey(site));
+        }
+      }
       setOverlaySvg({
         shade:
           shadeVisible && shadeFcRef.current.features.length
@@ -1209,6 +1297,8 @@ export default function HeatMap({
             : [],
         svi: sviVisible && sviFcRef.current.features.length ? projectSviOverlay(map, sviFcRef.current, selectedSviFipsRef.current) : [],
         contours: [],
+        walk: walkCoordsRef.current?.length ? projectWalkLine(map, walkCoordsRef.current) : null,
+        amenityShift,
       });
     };
     update();
@@ -1218,7 +1308,7 @@ export default function HeatMap({
       map.off("move", update);
       map.off("resize", update);
     };
-  }, [styleReady, aoi, draftAoi, sviVisible, svi, selectedSviFips, shadeVisible, shadeFc]);
+  }, [styleReady, aoi, draftAoi, sviVisible, svi, selectedSviFips, shadeVisible, shadeFc, walkCoords, walkVisible, coolingSites, coolingVisible, analysis?.hotspot]);
 
   useEffect(() => {
     if (!sviVisible) setSviPopup(null);
@@ -1260,13 +1350,43 @@ export default function HeatMap({
   const suppressClickRef = useRef(false);
   const resetTickSeen = useRef(0);
   const hotspot = analysis?.hotspot;
+  hotspotRef.current = hotspot;
 
   const mapStyle = useMemo(() => rasterStyle(useEsri), [useEsri]);
 
   const tcmHeat = useMemo(() => asCollection(analysis?.heatmap), [analysis]);
   const hoursHeat = useMemo(() => asCollection(analysis?.exceedance?.heatmap), [analysis]);
+  const streakHeat = useMemo(() => asCollection(analysis?.persistence?.heatmap), [analysis]);
+  const deltaHeat = useMemo(() => asCollection(analysis?.delta?.heatmap), [analysis]);
   const hasHours = hoursHeat.features.length > 0;
-  const activeHeat = heatMode === "hours" && hasHours ? hoursHeat : tcmHeat;
+  const hasStreak = streakHeat.features.length > 0;
+  const hasDelta = showDeltaLayers && deltaHeat.features.length > 0;
+  const edgesHeat = useMemo(() => {
+    if (!deltaHeat.features.length) return EMPTY_FC;
+    return {
+      type: "FeatureCollection" as const,
+      features: deltaHeat.features.map((ft) => {
+        const g = numProp(ft.properties as Record<string, unknown>, ["grad"]);
+        return { ...ft, properties: { ...ft.properties, temperature: g } };
+      }),
+    };
+  }, [deltaHeat]);
+
+  useEffect(() => {
+    if (hasDelta) return;
+    setHeatMode((mode) => (mode === "delta" || mode === "delta-edges" ? "temp" : mode));
+  }, [hasDelta]);
+
+  const activeHeat =
+    heatMode === "hours" && hasHours
+      ? hoursHeat
+      : heatMode === "streak" && hasStreak
+        ? streakHeat
+        : heatMode === "delta" && hasDelta
+          ? deltaHeat
+          : heatMode === "delta-edges" && hasDelta
+            ? edgesHeat
+            : tcmHeat;
   const overlayHeat = useMemo(() => {
     if (!overlayDeltaC || !tcmHeat.features.length) return EMPTY_FC;
     return {
@@ -1283,8 +1403,15 @@ export default function HeatMap({
   }, [tcmHeat, overlayDeltaC]);
 
   const displayHeat = heatMode === "temp" && overlayDeltaC ? overlayHeat : activeHeat;
-  const valueKey: "temperature" | "hours" = heatMode === "hours" && hasHours ? "hours" : "temperature";
-  const domain = useMemo(() => domainOf(displayHeat, valueKey), [displayHeat, valueKey]);
+  const hoursMode = (heatMode === "hours" && hasHours) || (heatMode === "streak" && hasStreak);
+  const deltaMode = heatMode === "delta" && hasDelta;
+  const edgesMode = heatMode === "delta-edges" && hasDelta;
+  const heatRamp = deltaMode ? DIVERGING_RAMP : RAMP;
+  const valueKey: "temperature" | "hours" = hoursMode ? "hours" : "temperature";
+  const domain = useMemo(
+    () => (deltaMode ? divergingDomain(displayHeat) : domainOf(displayHeat, valueKey)),
+    [displayHeat, valueKey, deltaMode],
+  );
   const heatBounds = useMemo(() => boundsOf(displayHeat), [displayHeat]);
   heatRef.current = displayHeat;
   const heatBoundsRef = useRef(heatBounds);
@@ -1295,7 +1422,7 @@ export default function HeatMap({
   );
   const isolinesRef = useRef(isolines);
   isolinesRef.current = isolines;
-  const contourUnit = heatMode === "hours" && hasHours ? " h" : "°";
+  const contourUnit = hoursMode ? " h" : "°";
 
   const buildingFc = useMemo(() => {
     if (!buildings?.features?.length) return EMPTY_FC;
@@ -1325,11 +1452,11 @@ export default function HeatMap({
       return null;
     }
     const padded = padBounds(bounds);
-    const key = `${fc.features.length}:${valueKey}:${domain.min.toFixed(4)}:${domain.max.toFixed(4)}:${boundsKey(padded)}:${overlayDeltaC}:${contoursVisible ? isolines.lines.features.length : 0}`;
+    const key = `${fc.features.length}:${valueKey}:${heatMode}:${domain.min.toFixed(4)}:${domain.max.toFixed(4)}:${boundsKey(padded)}:${overlayDeltaC}:${contoursVisible ? isolines.lines.features.length : 0}`;
     const prev = rasterCacheRef.current;
     if (prev?.key === key) return prev;
     const iso = contoursVisible ? isolines.lines : EMPTY_FC;
-    const { canvas, width, height } = rasterizeHeat(fc, padded, valueKey, domain, prev?.image ?? null, iso);
+    const { canvas, width, height } = rasterizeHeat(fc, padded, valueKey, domain, prev?.image ?? null, iso, heatRamp);
     const next: RasterCache = {
       key,
       image: canvas,
@@ -1341,7 +1468,7 @@ export default function HeatMap({
     };
     rasterCacheRef.current = next;
     return next;
-  }, [domain, overlayDeltaC, valueKey, displayHeat, isolines, contoursVisible]);
+  }, [domain, overlayDeltaC, valueKey, displayHeat, isolines, contoursVisible, heatRamp, heatMode]);
 
   const fitToHeat = useCallback(
     (map: MapLibreMap) => {
@@ -1377,14 +1504,14 @@ export default function HeatMap({
       const volumeOn = Boolean(volume && displayHeat.features.length > 0 && displayHeat.features.length <= 900);
       syncVolumeLayers(
         map,
-        volumeOn && domain ? volumeFeatures(displayHeat, valueKey, domain) : EMPTY_FC,
+        volumeOn && domain ? volumeFeatures(displayHeat, valueKey, domain, heatRamp) : EMPTY_FC,
         volumeOn,
       );
       restackOverlayLayers(map);
     } catch (err) {
       console.warn("[HeatMap] layer sync failed", err);
     }
-  }, [displayHeat, buildingFc, sviFc, sviVisible, selectedSviFips, pitched, volume, valueKey, domain, buildRaster, styleReady, logRasterOnce, isolines, contoursVisible, contourUnit]);
+  }, [displayHeat, buildingFc, sviFc, sviVisible, selectedSviFips, pitched, volume, valueKey, domain, buildRaster, styleReady, logRasterOnce, isolines, contoursVisible, contourUnit, heatRamp]);
 
   useEffect(() => {
     const map = mapLibreRef.current ?? mapRef.current?.getMap() ?? null;
@@ -1810,12 +1937,27 @@ export default function HeatMap({
 
   const legendMin = domain?.min;
   const legendMax = domain?.max;
-  const unit = heatMode === "hours" && hasHours ? "h" : "°C";
-  const legendTitle = heatMode === "hours" && hasHours ? "Hours above threshold" : "Air temperature";
+  const unit = hoursMode ? "h" : "°C";
+  const deltaHour = analysis?.delta?.hour ?? "";
+  const deltaFrom = analysis?.delta?.start_date ?? "";
+  const deltaTo = analysis?.delta?.end_date ?? "";
+  const legendTitle =
+    heatMode === "hours" && hasHours
+      ? "Hours above threshold"
+      : heatMode === "streak" && hasStreak
+        ? "Longest hot streak"
+        : deltaMode
+          ? `Change at ${deltaHour}, ${deltaFrom} → ${deltaTo}`
+          : edgesMode
+            ? "Where change is uneven (100 m, noisy)"
+            : "Air temperature";
+  const legendRamp = deltaMode
+    ? "linear-gradient(to right, #2563eb, #f8fafc, #dc2626)"
+    : "linear-gradient(to right, #facc15, #ea580c, #b91c1c, #7f1d1d)";
   const isoDigits = legendMin != null && legendMax != null && legendMax - legendMin < 1 ? 2 : 1;
 
   return (
-    <div className="absolute inset-0">
+    <div className={`absolute inset-0 ${panelOpen ? "lg:[&_.maplibregl-ctrl-top-right]:right-[22.5rem]" : ""}`}>
       <Map
         ref={mapRef}
         initialViewState={{
@@ -1856,6 +1998,12 @@ export default function HeatMap({
             return;
           }
           const map = mapLibreRef.current;
+          if (plantModeRef.current) {
+            setSviPopup(null);
+            onSviSelectRef.current?.(null);
+            onMapClick?.({ lon: e.lngLat.lng, lat: e.lngLat.lat });
+            return;
+          }
           if (map && sviVisibleRef.current && interactionRef.current !== "draw") {
             let tract: SviTract | null = null;
             if (map.getLayer(SVI_FILL_ID)) {
@@ -1887,26 +2035,60 @@ export default function HeatMap({
         onError={onMapError}
       >
         {hotspot && hotspot.temperature_c != null && (
-          <Marker longitude={hotspot.lon} latitude={hotspot.lat} anchor="center">
+          <Marker longitude={hotspot.lon} latitude={hotspot.lat} anchor="center" style={{ zIndex: 24 }}>
             <div className="pointer-events-none rounded-full border border-cyan-200/40 bg-rose-700/95 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
               {hotspot.temperature_c.toFixed(1)}°C
             </div>
           </Marker>
         )}
         {coolingVisible &&
-          coolingSites.map((site) => (
-            <Marker key={`${site.lon}:${site.lat}:${site.name}`} longitude={site.lon} latitude={site.lat} anchor="bottom">
-              <div
-                title={`${site.name} · ${site.kind}`}
-                className="flex flex-col items-center"
+          coolingSites.map((site) => {
+            const dest =
+              walkDest &&
+              Math.abs(walkDest.lon - site.lon) < 1e-5 &&
+              Math.abs(walkDest.lat - site.lat) < 1e-5;
+            const sports = isSportsCentre(site);
+            const nudged = overlaySvg.amenityShift.includes(amenityKey(site));
+            const title = `${site.name} · ${site.kind}${dest ? " · walk destination" : ""}`;
+            return (
+              <Marker
+                key={amenityKey(site)}
+                longitude={site.lon}
+                latitude={site.lat}
+                anchor="center"
+                style={{ zIndex: dest ? 12 : sports ? 4 : 8 }}
               >
-                <span className="rounded-md border border-cyan-200/40 bg-[#0f766e] px-1.5 py-0.5 text-[9px] font-semibold text-cyan-50 shadow">
-                  {site.kind}
-                </span>
-                <span className="mt-0.5 h-0 w-0 border-x-4 border-t-[6px] border-x-transparent border-t-[#0f766e]" />
-              </div>
-            </Marker>
-          ))}
+                <div
+                  title={title}
+                  className={`flex flex-col items-center ${sports ? "opacity-45" : ""}`}
+                  style={nudged ? { marginTop: 12 } : undefined}
+                >
+                  {dest && !nudged && (
+                    <span className="mb-0.5 max-w-[7.5rem] truncate rounded-md border border-cyan-100 bg-cyan-300 px-1.5 py-0.5 text-[9px] font-semibold text-[#0b0d10] shadow">
+                      {site.name}
+                    </span>
+                  )}
+                  <span
+                    className={`block rounded-full border shadow ${
+                      dest
+                        ? "h-3 w-3 border-cyan-100 bg-cyan-300"
+                        : sports
+                          ? "h-2 w-2 border-teal-700/50 bg-teal-800"
+                          : "h-2.5 w-2.5 border-teal-200/50 bg-teal-500"
+                    }`}
+                  />
+                </div>
+              </Marker>
+            );
+          })}
+        {plantedTrees.map((tree, i) => (
+          <Marker key={`tree-${i}-${tree.lon.toFixed(5)}-${tree.lat.toFixed(5)}`} longitude={tree.lon} latitude={tree.lat} anchor="bottom">
+            <div className="pointer-events-none flex flex-col items-center" title="Scenario tree">
+              <span className="h-3.5 w-3.5 rounded-full border border-lime-200/70 bg-lime-500 shadow" />
+              <span className="h-2 w-0.5 bg-lime-800/90" />
+            </div>
+          </Marker>
+        ))}
         <NavigationControl position="top-right" visualizePitch showCompass={false} />
       </Map>
       {sviPopup && (
@@ -1921,7 +2103,7 @@ export default function HeatMap({
           </p>
         </div>
       )}
-      {(boxPx || overlaySvg.svi.length > 0 || overlaySvg.shade.length > 0) && (
+      {(boxPx || overlaySvg.svi.length > 0 || overlaySvg.shade.length > 0 || overlaySvg.walk) && (
         <svg className="pointer-events-none absolute inset-0 z-[7] h-full w-full overflow-visible">
           {overlaySvg.svi.map((path, i) => (
             <path
@@ -1943,6 +2125,44 @@ export default function HeatMap({
               strokeWidth="0.7"
             />
           ))}
+          {overlaySvg.walk && (
+            <g>
+              <polyline
+                points={overlaySvg.walk.points}
+                fill="none"
+                stroke="#042f2e"
+                strokeWidth="6.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.55"
+              />
+              <polyline
+                points={overlaySvg.walk.points}
+                fill="none"
+                stroke="#5eead4"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="9 6"
+              />
+              <circle
+                cx={overlaySvg.walk.start.x}
+                cy={overlaySvg.walk.start.y}
+                r="4.8"
+                fill="#fb7185"
+                stroke="#fff"
+                strokeWidth="1.4"
+              />
+              <circle
+                cx={overlaySvg.walk.end.x}
+                cy={overlaySvg.walk.end.y}
+                r="5.4"
+                fill="#5eead4"
+                stroke="#042f2e"
+                strokeWidth="1.6"
+              />
+            </g>
+          )}
           {boxPx && (
             <polygon
               points={boxPx.points}
@@ -1952,13 +2172,6 @@ export default function HeatMap({
               strokeLinejoin="round"
             />
           )}
-          {visibleAoi && boxPx && (
-            <foreignObject x={boxPx.label.x - 48} y={boxPx.label.y - 22} width="96" height="22">
-              <div className="rounded bg-[#0b0d10]/90 px-1.5 py-0.5 text-center font-mono text-[10px] text-cyan-100">
-                {areaMi2(visibleAoi).toFixed(2)} mi²
-              </div>
-            </foreignObject>
-          )}
         </svg>
       )}
       {gpuReset && (
@@ -1966,8 +2179,8 @@ export default function HeatMap({
           Map GPU reset — restoring…
         </div>
       )}
-      {hasHours && (
-        <div className="absolute left-4 top-4 z-10 flex gap-1">
+      {(hasHours || hasStreak || hasDelta) && (
+        <div className="absolute left-4 top-4 z-10 flex max-w-[28rem] flex-wrap gap-1">
           <button
             type="button"
             onClick={() => setHeatMode("temp")}
@@ -1977,18 +2190,53 @@ export default function HeatMap({
           >
             Air temperature
           </button>
-          <button
-            type="button"
-            onClick={() => setHeatMode("hours")}
-            className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${
-              heatMode === "hours" ? "bg-cyan-400 text-[#0b0d10]" : "bg-[#161a20]/80 text-slate-200"
-            }`}
-          >
-            Hours above threshold
-          </button>
+          {hasHours && (
+            <button
+              type="button"
+              onClick={() => setHeatMode("hours")}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${
+                heatMode === "hours" ? "bg-cyan-400 text-[#0b0d10]" : "bg-[#161a20]/80 text-slate-200"
+              }`}
+            >
+              Hours above
+            </button>
+          )}
+          {hasStreak && (
+            <button
+              type="button"
+              onClick={() => setHeatMode("streak")}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${
+                heatMode === "streak" ? "bg-cyan-400 text-[#0b0d10]" : "bg-[#161a20]/80 text-slate-200"
+              }`}
+            >
+              Longest streak
+            </button>
+          )}
+          {hasDelta && (
+            <button
+              type="button"
+              onClick={() => setHeatMode("delta")}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${
+                heatMode === "delta" ? "bg-cyan-400 text-[#0b0d10]" : "bg-[#161a20]/80 text-slate-200"
+              }`}
+            >
+              ΔT (range)
+            </button>
+          )}
+          {hasDelta && (
+            <button
+              type="button"
+              onClick={() => setHeatMode("delta-edges")}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${
+                heatMode === "delta-edges" ? "bg-cyan-400 text-[#0b0d10]" : "bg-[#161a20]/80 text-slate-200"
+              }`}
+            >
+              ΔT edges
+            </button>
+          )}
         </div>
       )}
-      <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
+      <div className={`absolute bottom-4 z-10 flex flex-col items-end gap-2 ${panelOpen ? "right-4 lg:right-[23rem]" : "right-4"}`}>
         {sviVisible && sviFc.features.length > 0 && (
           <div className="min-w-[148px] rounded-md border border-indigo-300/20 bg-[#161a20]/88 px-3 py-2 text-[11px] text-slate-200 backdrop-blur-sm">
             <p className="mb-0.5 text-[10px] font-medium tracking-wide text-indigo-200">SVI 2022</p>
@@ -2012,7 +2260,7 @@ export default function HeatMap({
             <div
               className="h-1.5 w-full rounded-full"
               style={{
-                background: "linear-gradient(to right, #facc15, #ea580c, #b91c1c, #7f1d1d)",
+                background: legendRamp,
               }}
             />
             <div className="mt-1 flex justify-between font-mono text-[10px] text-stone-400">
@@ -2026,7 +2274,7 @@ export default function HeatMap({
               </span>
             </div>
             {overlayDeltaC > 0 && (
-              <p className="mt-1 text-[10px] text-lime-300/90">Canopy model on — not a new satellite run</p>
+              <p className="mt-1 text-[10px] text-lime-300/90">Canopy sketch on — not a new satellite run</p>
             )}
             {contoursVisible && isolines.lines.features.length > 0 && isolines.levels.length > 0 && (
               <p className="mt-1 text-[10px] text-slate-500">

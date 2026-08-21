@@ -157,9 +157,10 @@ def cached_heatmap(
     analytic_type: str,
     threshold: float | None = None,
     direction: str | None = None,
+    end_date: str | None = None,
     live: bool = True,
 ) -> dict[str, Any] | None:
-    key = cache.cache_key(
+    parts: list[Any] = [
         "heatmap",
         _aoi_fingerprint(polygon_aoi),
         start_date,
@@ -169,7 +170,11 @@ def cached_heatmap(
         analytic_type,
         threshold,
         direction,
-    )
+    ]
+    # Omit end_date from one-day keys so existing 2024-07-15 caches still hit.
+    if end_date:
+        parts.append(end_date)
+    key = cache.cache_key(*parts)
     hit = cache.load(key)
     if hit is not None:
         hit["cached"] = True
@@ -182,6 +187,7 @@ def cached_heatmap(
             polygon_aoi=polygon_aoi,
             start_date=start_date,
             start_time=start_time,
+            end_date=end_date,
             filter_type=filter_type,
             granularity=granularity,
             analytic_type=analytic_type,

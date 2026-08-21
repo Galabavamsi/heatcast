@@ -54,6 +54,61 @@ export type ComfortContext = {
   note?: string;
 };
 
+export type HoursLayer = {
+  activity_id: string | null;
+  mean_hours: number | null;
+  max_hours: number | null;
+  units: string;
+  analytic_type?: string;
+  heatmap?: {
+    type: "FeatureCollection";
+    features: Array<{
+      type: "Feature";
+      geometry: { type: string; coordinates: unknown };
+      properties: {
+        tile_id?: string | number | null;
+        temperature?: number | null;
+        hours?: number | null;
+        value?: number | null;
+        measured_c?: number | null;
+        overlay?: boolean;
+        delta_c?: number | null;
+        delta_abs?: number | null;
+        grad?: number | null;
+      };
+    }>;
+  };
+};
+
+export type DeltaLayer = {
+  activity_id: string | null;
+  start_activity_id?: string | null;
+  end_activity_id?: string | null;
+  mean_delta: number | null;
+  max_delta: number | null;
+  min_delta: number | null;
+  delta_abs_mean?: number | null;
+  n_matched: number;
+  units: string;
+  hour?: string;
+  start_date?: string;
+  end_date?: string;
+  note?: string;
+  analytic_type?: string;
+  heatmap?: HoursLayer["heatmap"];
+};
+
+export type WalkRoute = {
+  ok: boolean;
+  type?: string;
+  coordinates?: [number, number][];
+  distance_m?: number;
+  duration_s?: number;
+  profile?: string;
+  source?: string;
+  note?: string;
+};
+
 export type AnalyzeResponse = {
   city: { id: string; name: string; mode?: string };
   place_name?: string;
@@ -69,6 +124,18 @@ export type AnalyzeResponse = {
     threshold_c: number;
     mean_hours_above: number | null;
     max_hours_above: number | null;
+    mean_streak_hours?: number | null;
+    max_streak_hours?: number | null;
+    unrelieved_heat_ratio?: number | null;
+    unrelieved?: {
+      ratio: number;
+      label?: string;
+      formula?: string;
+      citation_title?: string;
+      citation_url?: string;
+      osha_nprm_url?: string;
+      note?: string;
+    } | null;
   };
   rain?: RainContext | null;
   comfort?: ComfortContext | null;
@@ -92,27 +159,9 @@ export type AnalyzeResponse = {
       };
     }>;
   };
-  exceedance: {
-    activity_id: string | null;
-    mean_hours: number | null;
-    max_hours: number | null;
-    units: string;
-  heatmap?: {
-    type: "FeatureCollection";
-    features: Array<{
-      type: "Feature";
-      geometry: { type: string; coordinates: unknown };
-      properties: {
-        tile_id?: string | number | null;
-        temperature?: number | null;
-        hours?: number | null;
-        value?: number | null;
-        measured_c?: number | null;
-        overlay?: boolean;
-      };
-    }>;
-  };
-  } | null;
+  exceedance: HoursLayer | null;
+  persistence?: HoursLayer | null;
+  delta?: DeltaLayer | null;
   stats: {
     n_cells: number;
     feature_count: number;
@@ -121,7 +170,7 @@ export type AnalyzeResponse = {
     max: number | null;
     min: number | null;
   };
-  hotspot: { lon: number; lat: number; temperature_c: number | null } | null;
+  hotspot: { lon: number; lat: number; temperature_c: number | null; tile_id?: string | number | null } | null;
   warning: string | null;
   coverage_miss: boolean;
   confidence: {
@@ -135,11 +184,15 @@ export type AnalyzeResponse = {
     city_id: string;
     granularity_m: number;
     filter_type: number;
+    duration_filter_type?: number;
+    duration_days?: number;
+    end_date?: string | null;
+    duration_note?: string;
     analytic_type: string;
     threshold_c: number;
     scale_note?: string;
   };
-  activity_ids: { tcm: string | null; exceedance: string | null };
+  activity_ids: { tcm: string | null; exceedance: string | null; persistence?: string | null; tcm_end?: string | null };
 };
 
 export type EnrichResponse = {
@@ -190,6 +243,8 @@ export type BuildingsResponse = GeoJSON.FeatureCollection & {
 export type CoolingSite = {
   name: string;
   kind: string;
+  kindKey?: string;
+  walkOk: boolean;
   lon: number;
   lat: number;
 };

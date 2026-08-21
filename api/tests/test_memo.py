@@ -38,3 +38,39 @@ class BriefContextTests(unittest.TestCase):
         self.assertIn("i-Tree", doc["text"])
         self.assertIn("CDC/ATSDR SVI", doc["text"])
         self.assertNotIn("null", doc["text"].lower())
+
+    def test_template_names_streak_hours(self):
+        doc = write_memo(
+            {
+                "city": "EaDo",
+                "scorecard": {
+                    "mean_c": 35.87,
+                    "max_c": 37.1,
+                    "threshold_c": 35.0,
+                    "mean_hours_above": 5.09,
+                    "mean_streak_hours": 4.2,
+                },
+            },
+            use_llm=False,
+        )
+        self.assertIn("5.09 h", doc["text"])
+        self.assertIn("4.2 h", doc["text"])
+        self.assertIn("consecutive", doc["text"])
+
+    def test_template_names_unrelieved_ratio(self):
+        doc = write_memo(
+            {
+                "city": "EaDo",
+                "scorecard": {
+                    "mean_c": 35.87,
+                    "max_c": 37.1,
+                    "threshold_c": 35.0,
+                    "mean_hours_above": 5.09,
+                    "mean_streak_hours": 4.2,
+                    "unrelieved_heat_ratio": 0.825,
+                },
+            },
+            use_llm=False,
+        )
+        self.assertIn("Unrelieved-heat ratio 0.825", doc["text"])
+        self.assertIn("HeatCast index", doc["text"])

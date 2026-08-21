@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 API_ROOT = Path(__file__).resolve().parent.parent
 if str(API_ROOT) not in sys.path:
@@ -26,6 +26,7 @@ from fortyguard import FortyGuardError, TaskFailedError  # noqa: E402
 from .buildings import fetch_buildings  # noqa: E402
 from .cooling import fetch_cooling_centers  # noqa: E402
 from .cities import CITIES, CITY_ORDER, get_city  # noqa: E402
+from .dates import duration_note, duration_window  # noqa: E402
 from .fg import (  # noqa: E402
     OUTPUT_DIR,
     cached_call,
@@ -54,14 +55,17 @@ from .geo import (  # noqa: E402
 from .landcover import bucket_classes  # noqa: E402
 from .memo import write_memo  # noqa: E402
 from .scenario import estimate_scenario, scenario_model_meta  # noqa: E402
+from .routing import walk_route  # noqa: E402
+from .delta import build_delta_layer  # noqa: E402
 from .scoring import score_aoi, slim_heatmap  # noqa: E402
 from .svi import SviError, svi_for_bbox  # noqa: E402  # CDC SVI 2022 overlay
+from .unrelieved import unrelieved_scorecard  # noqa: E402
 from .weather import fetch_elevation_m, fetch_precip  # noqa: E402
 
 ENRICH_CORE_S = 45.0
 ENRICH_EXTRA_S = 12.0
 
-app = FastAPI(title="HeatCast", version="0.3.0")
+app = FastAPI(title="HeatCast", version="0.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -78,14 +82,23 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 class AnalyzeRequest(BaseModel):
     start_date: str
     start_time: str
+    end_date: str | None = None
     city_id: str | None = None
     bbox: list[float] | None = None
     aoi: dict[str, Any] | None = None
     name: str | None = None
     threshold_c: float | None = None
     include_exceedance: bool = True
+    include_persistence: bool = True
     canopy_delta_pct: float = 0.0
     current_canopy_pct: float | None = None
+
+    @field_validator("end_date", mode="before")
+    @classmethod
+    def _empty_end_date(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
 
 class EnrichRequest(BaseModel):
@@ -271,6 +284,22 @@ def osm_layers(
     return {"cooling": cooling, "buildings": buildings}
 
 
+@app.get("/v1/walk")
+def walk(
+    from_lon: float,
+    from_lat: float,
+    to_lon: float,
+    to_lat: float,
+) -> dict[str, object]:
+    """Walking polyline from hotspot to an indoor site. US-only, fail-open."""
+    if not in_us(from_lon, from_lat) or not in_us(to_lon, to_lat):
+        raise HTTPException(status_code=400, detail="Walking routes are US-only.")
+    route = walk_route(from_lon, from_lat, to_lon, to_lat)
+    if route is None:
+        return {"ok": False, "coordinates": [], "note": "No walking route for these points."}
+    return {"ok": True, **route}
+
+
 @app.get("/v1/weather")
 def weather(
     date: str = "2024-07-15",
@@ -384,6 +413,75 @@ def _resolve_aoi(body: AnalyzeRequest) -> tuple[dict[str, Any], str, str | None]
     raise HTTPException(status_code=400, detail="Draw a box on the map or search a US place.")
 
 
+def _tcm_snapshot(
+    aoi: dict[str, Any],
+    *,
+    start_date: str,
+    start_time: str,
+) -> dict[str, Any] | None:
+    """Single-hour TCM. Fail-open for the Range end snapshot."""
+    try:
+        return cached_heatmap(
+            aoi,
+            start_date=start_date,
+            start_time=start_time,
+            filter_type=1,
+            granularity=100,
+            analytic_type="tcm",
+            live=True,
+        )
+    except (TaskFailedError, FortyGuardError):
+        return None
+
+
+def _duration_payload(
+    aoi: dict[str, Any],
+    *,
+    start_date: str,
+    end_date: str | None,
+    filter_type: int,
+    threshold: float,
+    analytic_type: str,
+    live: bool,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Exceedance (total hours) or persistence (longest consecutive streak). Fail-open."""
+    try:
+        raw = cached_heatmap(
+            aoi,
+            start_date=start_date,
+            start_time=None,
+            end_date=end_date,
+            filter_type=filter_type,
+            granularity=100,
+            analytic_type=analytic_type,
+            threshold=threshold,
+            direction="above",
+            live=live,
+        )
+    except (TaskFailedError, FortyGuardError):
+        return None, None
+    if not raw:
+        return None, None
+    activity_id = raw.get("activity_id")
+    result = raw.get("result") or {}
+    features = heatmap_features(result)
+    stats = heatmap_stats(result, features)
+    score = score_aoi(features, threshold)
+    return (
+        {
+            "cached": raw.get("cached"),
+            "activity_id": activity_id,
+            "analytic_type": analytic_type,
+            "stats": stats,
+            "mean_hours": score.get("mean_hours") or stats.get("mean"),
+            "max_hours": score.get("max_hours") or stats.get("max"),
+            "units": "hour",
+            "heatmap": slim_heatmap(features, max_features=1800),
+        },
+        activity_id if isinstance(activity_id, str) else None,
+    )
+
+
 @app.post("/v1/analyze")
 def analyze(body: AnalyzeRequest) -> dict[str, object]:
     try:
@@ -413,14 +511,22 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Temperature coverage is the United States only.")
 
     threshold = body.threshold_c if body.threshold_c is not None else (38.0 if lat > 32.5 and lon < -110 else 35.0)
-    datetime_label = f"{body.start_date}T{body.start_time}"
+    try:
+        window = duration_window(body.start_date, body.end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    datetime_label = (
+        f"{window.start_date}T{body.start_time}"
+        if window.end_date is None
+        else f"{window.start_date}T{body.start_time}/{window.end_date}"
+    )
     tz = timezone_for(lon, lat)
     west, south, east, north = bbox_of_aoi(aoi)
 
     try:
         tcm = cached_heatmap(
             aoi,
-            start_date=body.start_date,
+            start_date=window.start_date,
             start_time=body.start_time,
             filter_type=1,
             granularity=100,
@@ -439,43 +545,84 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
     coverage_miss = is_coverage_miss(features, stats)
     aoi_score = score_aoi([] if coverage_miss else features, threshold)
     hotspot = None if coverage_miss else aoi_score.get("hotspot")
+    activity_id = tcm.get("activity_id")
 
     exceedance_payload = None
     exceedance_id = None
-    try:
-        exceedance = cached_heatmap(
-            aoi,
-            start_date=body.start_date,
-            start_time=None,
-            filter_type=3,
-            granularity=100,
-            analytic_type="exceedance",
-            threshold=threshold,
-            direction="above",
-            live=body.include_exceedance,
-        )
-        if exceedance:
-            exceedance_id = exceedance.get("activity_id")
-            ex_result = exceedance.get("result") or {}
-            ex_features = heatmap_features(ex_result)
-            ex_stats = heatmap_stats(ex_result, ex_features)
-            ex_score = score_aoi(ex_features, threshold)
-            exceedance_payload = {
-                "cached": exceedance.get("cached"),
-                "activity_id": exceedance_id,
-                "stats": ex_stats,
-                "mean_hours": ex_score.get("mean_hours") or ex_stats.get("mean"),
-                "max_hours": ex_score.get("max_hours") or ex_stats.get("max"),
-                "units": "hour",
-                "heatmap": slim_heatmap(ex_features, max_features=1800),
+    persistence_payload = None
+    persistence_id = None
+    tcm_end_raw = None
+    duration_jobs: dict[str, tuple[str, bool]] = {}
+    if body.include_exceedance:
+        duration_jobs["exceedance"] = ("exceedance", body.include_exceedance)
+    if body.include_persistence:
+        duration_jobs["persistence"] = ("persistence", body.include_persistence)
+    need_end_tcm = window.end_date is not None
+    extra_workers = 1 if need_end_tcm else 0
+    if duration_jobs or need_end_tcm:
+        pool = ThreadPoolExecutor(max_workers=max(1, len(duration_jobs) + extra_workers))
+        try:
+            futs = {
+                pool.submit(
+                    _duration_payload,
+                    aoi,
+                    start_date=window.start_date,
+                    end_date=window.end_date,
+                    filter_type=window.filter_type,
+                    threshold=threshold,
+                    analytic_type=kind,
+                    live=live,
+                ): name
+                for name, (kind, live) in duration_jobs.items()
             }
-    except (TaskFailedError, FortyGuardError):
-        exceedance_payload = None
+            if need_end_tcm and window.end_date:
+                futs[
+                    pool.submit(
+                        _tcm_snapshot,
+                        aoi,
+                        start_date=window.end_date,
+                        start_time=body.start_time,
+                    )
+                ] = "tcm_end"
+            for fut, name in futs.items():
+                if name == "tcm_end":
+                    tcm_end_raw = fut.result()
+                    continue
+                payload, activity = fut.result()
+                if name == "exceedance":
+                    exceedance_payload, exceedance_id = payload, activity
+                else:
+                    persistence_payload, persistence_id = payload, activity
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    delta_payload = None
+    tcm_end_id = None
+    if need_end_tcm and tcm_end_raw and not coverage_miss:
+        end_result = tcm_end_raw.get("result") or {}
+        end_features = heatmap_features(end_result)
+        end_stats = heatmap_stats(end_result, end_features)
+        if not is_coverage_miss(end_features, end_stats):
+            raw_end_id = tcm_end_raw.get("activity_id")
+            tcm_end_id = raw_end_id if isinstance(raw_end_id, str) else None
+            start_id = activity_id if isinstance(activity_id, str) else None
+            try:
+                delta_payload = build_delta_layer(
+                    features,
+                    end_features,
+                    hour=body.start_time,
+                    start_date=window.start_date,
+                    end_date=window.end_date or window.start_date,
+                    start_activity_id=start_id,
+                    end_activity_id=tcm_end_id,
+                )
+            except Exception:
+                delta_payload = None
 
     rain = fetch_precip(
         lat,
         lon,
-        body.start_date,
+        window.start_date,
         hour=body.start_time,
         timezone=tz,
     )
@@ -489,6 +636,8 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
         )
 
     mean_hours = None if not exceedance_payload else exceedance_payload.get("mean_hours")
+    mean_streak = None if not persistence_payload else persistence_payload.get("mean_hours")
+    unrelieved = unrelieved_scorecard(mean_streak, mean_hours)
     scenario = estimate_scenario(
         canopy_delta_pct=body.canopy_delta_pct,
         current_canopy_pct=body.current_canopy_pct,
@@ -497,7 +646,6 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
         threshold_c=threshold,
     )
 
-    activity_id = tcm.get("activity_id")
     slim_stats = {k: stats[k] for k in ("n_cells", "feature_count", "units", "mean", "max", "min") if k in stats}
     if coverage_miss:
         slim_stats["mean"] = None
@@ -512,6 +660,10 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
         "threshold_c": threshold,
         "mean_hours_above": mean_hours,
         "max_hours_above": None if not exceedance_payload else exceedance_payload.get("max_hours"),
+        "mean_streak_hours": mean_streak,
+        "max_streak_hours": None if not persistence_payload else persistence_payload.get("max_hours"),
+        "unrelieved_heat_ratio": None if not unrelieved else unrelieved.get("ratio"),
+        "unrelieved": unrelieved,
     }
 
     memo_doc = write_memo(
@@ -522,7 +674,11 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
             "flood": flood,
             "scenario": scenario,
             "coverage_miss": coverage_miss,
-            "activity_ids": {"tcm": activity_id, "exceedance": exceedance_id},
+            "activity_ids": {
+                "tcm": activity_id,
+                "exceedance": exceedance_id,
+                "persistence": persistence_id,
+            },
         },
         use_llm=False,
     )
@@ -546,6 +702,8 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
         "memo_meta": {"source": memo_doc.get("source"), "model": memo_doc.get("model")},
         "heatmap": heatmap,
         "exceedance": exceedance_payload,
+        "persistence": persistence_payload,
+        "delta": delta_payload,
         "stats": slim_stats,
         "hotspot": hotspot,
         "warning": warning,
@@ -561,15 +719,26 @@ def analyze(body: AnalyzeRequest) -> dict[str, object]:
             "city_id": city_id or "custom",
             "granularity_m": 100,
             "filter_type": 1,
+            "duration_filter_type": window.filter_type,
+            "duration_days": window.days,
+            "end_date": window.end_date,
+            "duration_note": duration_note(window),
             "analytic_type": "tcm",
             "threshold_c": threshold,
             "scale_note": (
                 "Tiles are ~100 m neighborhood UHI, not sidewalk CFD. "
-                "Tree scenario is a literature overlay, not a FortyGuard what-if. "
-                "OSM extrusion is massing context only."
+                "Hours = total time above threshold; streak = longest consecutive run. "
+                "Unrelieved-heat ratio = streak ÷ hours (HeatCast index, 0–1). "
+                "Range ΔT is To − From at the scored hour (two TCM snapshots), not a heat flux. "
+                "Tree sketch is a literature overlay, not a new heatmap."
             ),
         },
-        "activity_ids": {"tcm": activity_id, "exceedance": exceedance_id},
+        "activity_ids": {
+            "tcm": activity_id,
+            "exceedance": exceedance_id,
+            "persistence": persistence_id,
+            "tcm_end": tcm_end_id,
+        },
     }
 
 

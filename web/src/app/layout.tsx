@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HeatCast",
-  description: "Score any US neighborhood on air temperature and hours above a heat threshold.",
+  title: {
+    default: "HeatCast",
+    template: "%s · HeatCast",
+  },
+  description:
+    "Neighborhood heat scorecard for US planners — duration, indoor cool space, and a planting sketch.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -75,6 +75,16 @@ Museum District, **same date**, is the greener control tract (preset `houston-mu
 
 ---
 
+HeatCast is a small site plus the map:
+
+| Route | What it is |
+|---|---|
+| `/` | Product landing |
+| `/app` | Map + scorecard (the product) |
+| `/method` | Honest layer notes (what it is / is not) |
+
+After Score, **Export** downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief, and (if present) hours/TCM tiles. A share URL restores the box and date — it does **not** auto-score.
+
 ## How a session works
 
 ```mermaid
@@ -85,9 +95,9 @@ flowchart LR
   D --> E["5. Decide<br/>trees / pavement"]
 ```
 
-1. **Search** a US city or neighborhood, or click **Draw area** and drag a box (Space pans, scroll still zooms). Stay under **45 mi²**.
+1. Open **`/app`** (or **Score a neighborhood** from `/`). **Search** a US city or neighborhood, or click **Draw area** and drag a box (Space pans, scroll still zooms). Stay under **45 mi²**.
 2. Leave **date 2024-07-15** and **hour 15:00** for the demo (historic summer; Phoenix 2026-08-17 can return 0 tiles and still bill).
-3. Click **Score area**. Heatmap appears first. SVI, OSM, and satellite follow. The brief starts as a template, then rewrites.
+3. Click **Score area**. Heatmap appears first. SVI, OSM, and satellite follow. The brief starts as a template, then rewrites. Export when you want a file.
 4. Toggle **Isolines / SVI / Shade / Cooling**. Switch **Flat → 3D heat** and right-drag to orbit.
 5. Use **+10% / +20% canopy** only as a labeled estimate. FortyGuard does **not** recompute.
 

@@ -68,3 +68,33 @@ body {
   backdrop-filter: blur(16px);
   border: 1px solid color-mix(in srgb, white 8%, transparent);
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .method-page {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .method-page h1,
+  .method-page h2,
+  .method-page dt,
+  .method-page p,
+  .method-page dd,
+  .method-page li {
+    color: #111 !important;
+  }
+
+  .method-page a {
+    color: #111 !important;
+    text-decoration: underline;
+  }
+
+  footer {
+    border-color: #ccc !important;
+    color: #444 !important;
+  }
+}

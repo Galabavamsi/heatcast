@@ -6,7 +6,11 @@ from typing import Any
 
 from .overpass import overpass_query
 from . import cache as disk_cache
+
 MAX_SITES = 40
+
+# Indoor public buildings cities actually designate as cooling centers.
+WALK_KINDS = frozenset({"library", "community_centre", "social_facility", "townhall"})
 
 KINDS = {
     "library": "Library",
@@ -30,13 +34,13 @@ QUERY = """
   way["amenity"="townhall"]({s},{w},{n},{e});
   way["leisure"="sports_centre"]({s},{w},{n},{e});
 );
-out center tags 40;
+out center tags;
 """
 
 
 def fetch_cooling_centers(west: float, south: float, east: float, north: float) -> dict[str, Any]:
     cache_id = disk_cache.cache_key(
-        "osm-cooling-v2", round(west, 4), round(south, 4), round(east, 4), round(north, 4)
+        "osm-cooling-v3", round(west, 4), round(south, 4), round(east, 4), round(north, 4)
     )
     cached = disk_cache.load(cache_id)
     if isinstance(cached, dict) and isinstance(cached.get("features"), list):
@@ -63,20 +67,23 @@ def fetch_cooling_centers(west: float, south: float, east: float, north: float) 
                 "properties": {
                     "name": name,
                     "kind": kind,
+                    "kind_key": kind_key,
+                    "walk_ok": kind_key in WALK_KINDS,
                     "osm_id": el.get("id"),
                     "osm_type": el.get("type"),
                 },
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
             }
         )
-        if len(features) >= MAX_SITES:
-            break
+    indoor = [ft for ft in features if ft["properties"]["walk_ok"]]
+    other = [ft for ft in features if not ft["properties"]["walk_ok"]]
+    features = (indoor + other)[:MAX_SITES]
     result = {
         "type": "FeatureCollection",
         "features": features,
         "meta": {
             "count": len(features),
-            "note": "OSM indoor public sites often used as cooling centers. Not an official cooling-center registry and not FortyGuard.",
+            "note": "OSM libraries, community centres, social facilities, and town halls — proxies for indoor cool space, not an official cooling-center registry. Sports centres are mapped but are not walk destinations.",
         },
     }
     disk_cache.save(cache_id, result)

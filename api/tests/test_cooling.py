@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.cooling import _center
+from app.cooling import WALK_KINDS, _center
 
 
 class CoolingParseTests(unittest.TestCase):
@@ -20,6 +20,11 @@ class CoolingParseTests(unittest.TestCase):
         lat, lon = _center({})
         self.assertIsNone(lat)
         self.assertIsNone(lon)
+
+    def test_walk_kinds_are_indoor_public_not_sports(self):
+        self.assertIn("library", WALK_KINDS)
+        self.assertIn("community_centre", WALK_KINDS)
+        self.assertNotIn("sports_centre", WALK_KINDS)
 
 
 if __name__ == "__main__":

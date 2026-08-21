@@ -8,6 +8,8 @@ from typing import Any
 from shapely.geometry import shape
 
 MAX_AREA_MI2 = 45.0
+# International mile (exact). 1 mi² = 1609.344² m². Not Web Mercator.
+_M_PER_MI = 1609.344
 
 
 def aoi_from_bbox(west: float, south: float, east: float, north: float) -> dict[str, Any]:
@@ -55,11 +57,25 @@ def bbox_of_aoi(polygon_aoi: dict[str, Any]) -> tuple[float, float, float, float
     return float(west), float(south), float(east), float(north)
 
 
+def _meters_per_degree(lat_deg: float) -> tuple[float, float]:
+    """WGS84 metres per degree of latitude and longitude at geodetic φ.
+
+    Latitude series (Snyder / common GPS approximation):
+      111_132.954 − 559.822·cos(2φ) + 1.175·cos(4φ)
+    Longitude: 111.320 km × cos(φ). Do not use EPSG:3857 for area.
+    Keep in sync with web/src/lib/aoi.ts ``areaMi2``.
+    """
+    phi = math.radians(lat_deg)
+    m_lat = 111132.954 - 559.822 * math.cos(2.0 * phi) + 1.175 * math.cos(4.0 * phi)
+    m_lon = 111320.0 * math.cos(phi)
+    return m_lat, m_lon
+
+
 def polygon_area_mi2(polygon_aoi: dict[str, Any]) -> float:
     geom = shape(polygon_aoi["features"][0]["geometry"])
-    lat = geom.centroid.y
-    km2 = geom.area * (111.32 * math.cos(math.radians(lat))) * 110.57
-    return km2 / 2.589988
+    m_lat, m_lon = _meters_per_degree(geom.centroid.y)
+    # shapely .area is in square degrees for lon/lat rings.
+    return geom.area * m_lon * m_lat / (_M_PER_MI * _M_PER_MI)
 
 
 def aoi_centroid(polygon_aoi: dict[str, Any]) -> tuple[float, float]:
