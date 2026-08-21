@@ -2,7 +2,7 @@
 
 Neighborhood heat scorecard for **FortyGuard Hackathon’26**.
 
-Draw a US neighborhood, pick a historic hour, **Score area**. You get FortyGuard ~100 m **2 m air** tiles (temperature + hours above threshold), CDC social-vulnerability tracts, OSM shade and indoor public sites, and a planner brief that names what to do next.
+Draw a US neighborhood, pick **Day** or a **Range** (max 7 days) and an hour, **Score area**. You get FortyGuard ~100 m **2 m air** tiles (temperature + hours above threshold + longest streak), an **unrelieved-heat ratio**, CDC social-vulnerability tracts, OSM shade and indoor public sites, an OSRM walk from the hotspot to a library or community centre, and a planner brief that names what to do next.
 
 ![Scored East Downtown: FortyGuard heat, SVI tracts, cooling-site pins, and the planner scorecard](docs/images/heatcast-scored.png)
 
@@ -22,9 +22,9 @@ Draw a US neighborhood, pick a historic hour, **Score area**. You get FortyGuard
 
 HeatCast answers one planner question:
 
-> On this block, on this summer afternoon, **how hot is the air, how long does it stay hot, who is most exposed, and what can we actually do** (trees, cool pavement, nearby indoor space)?
+> On this block, on this summer afternoon (or over a few days), **how hot is the air, how long does it stay hot, who is most exposed, how far is indoor public space, and what can we actually do** (trees, cool pavement)?
 
-It is **not** a walking-route app, not sidewalk CFD, and not a FortyGuard “add trees and re-simulate” product. FortyGuard measures. HeatCast **scores a district** and layers public context on top.
+It is **not** sidewalk CFD, not a citywide cool-commute planner, and not a FortyGuard “add trees and re-simulate” product. FortyGuard measures. HeatCast **scores a district** and layers public context on top. Walk is a thin hotspot → indoor check, not a second product.
 
 ```mermaid
 flowchart LR
@@ -37,31 +37,34 @@ flowchart LR
 | Person | Job they have | What HeatCast gives them |
 |---|---|---|
 | **City planner / sustainability staff** | Where to plant or re-pave first | Hottest tiles × high-SVI tracts + satellite mix (canopy vs pavement) |
-| **Construction / outdoor-work PM** | Can this pad take a July afternoon? | Mean/max **hours ≥ 35 °C** (Houston) on the real FortyGuard exceedance layer |
-| **OEM / public health** | Where are people during a heat event? | OSM libraries and community centres **in the same box** (not an official cooling-center list) |
+| **Construction / outdoor-work PM** | Can this pad take a July afternoon? | Mean/max **hours ≥ 35 °C** (Houston) and longest streak on the real FortyGuard duration layers |
+| **OEM / public health** | Where are people during a heat event? | OSM libraries and community centres **in the same box**, plus a walk from the hotspot (not an official cooling-center list) |
 | **Hackathon judges** | Is FortyGuard central? | Live TCM + exceedance `activity_id`s on the coverage strip |
 
 ---
 
 ## Worked example: Houston East Downtown, 15 Jul 2024, 15:00
 
-This is a real Score from the running app (same settings you should demo).
+This is a real Score from the running app (same settings you should demo). The PNG is older chrome; the numbers below are from that Score.
 
 ![Search any US city; pick East Downtown, Houston; date 2024-07-15 15:00](docs/images/heatcast-search.png)
 
-![AOI drawn over East Downtown (~1.6 mi²) before Score](docs/images/heatcast-eado-aoi.png)
+![AOI drawn over East Downtown before Score](docs/images/heatcast-eado-aoi.png)
+
+Area on the map is a **WGS84** rectangle: metres-per-degree of latitude, longitude scaled by **cos(lat)**. Not Web Mercator. The Houston share-URL box (`west=-95.40236&south=29.73387&east=-95.37434&north=29.75282`) is **≈ 2.20 mi²**. A smaller hand-drawn EaDo box from this Score was **1.59 mi²** (417 tiles). Stay under the **45 mi²** cap.
 
 | Signal | Number | What you do with it |
 |---|---|---|
-| Area | **1.59 mi²** (417 tiles) | Small enough to be a neighborhood, under the 45 mi² cap |
 | FortyGuard mean / max | **35.87 / 37.1 °C** | Peak hour is already above Houston’s 35 °C threshold |
 | Share of tiles ≥ 35 °C | **~78%** | Most of the box is in exceedance at 15:00, not one freak tile |
 | Hours ≥ 35 °C | **mean 5.09 h · max 8.46 h** | Duration story for outdoor work — not just the 37.1 °C pin |
-| Hotspot | **29.7513, −95.3520 · 37.1 °C** | Where to look first on the map |
+| Unrelieved-heat ratio | streak ÷ hours (0–1) | Near 1 means those hours arrived as one unbroken run. HeatCast index, not a WBGT table. |
+| Hotspot | **29.7513, −95.3520 · 37.1 °C** | Where to look first on the map; walk starts here |
 | NWS heat index (Open-Meteo) | **37.5 °C · danger · RH 59%** | Comfort context at km scale; labeled separately from FG |
 | Satellite at hotspot | **~10% plant/canopy · ~56% impervious** (roads ~52%) | Cause tag: thin canopy + pavement → EPA cool pavement + USDA i-Tree |
 | SVI | **Census Tract 3123 · 94th percentile · 36.2 °C** | Highest heat×vulnerability in the box — equity priority |
 | Cooling sites (OSM) | **HPL Express (library), Star of Hope** | Indoor public space already in the neighborhood |
+| Walk | Hotspot → nearest library / community centre | OSRM walking line in the Area card; not a citywide cool route |
 | Tree slider | **+10% ≈ −0.15 °C · +20% ≈ −0.30 °C** | Literature overlay **on the existing tiles**, not a new FG heatmap |
 | Shade at 15:00 | **Sun ~68° · ~4 m shadows** | July afternoon sun is high; building shade is short. Don’t oversell umbra. |
 
@@ -79,27 +82,36 @@ HeatCast is a small site plus the map:
 
 | Route | What it is |
 |---|---|
-| `/` | Product landing |
+| `/` | Product landing (duration / indoor walk / planting beats + **Score a neighborhood**) |
 | `/app` | Map + scorecard (the product) |
 | `/method` | Honest layer notes (what it is / is not) |
 
-After Score, **Export** downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief, and (if present) hours/TCM tiles. A share URL restores the box and date — it does **not** auto-score.
+Nav: **HeatCast · Score · Method**. After Score, **Export** (header, next to **Scorecard**) downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief `.txt`, and (if present) hours/TCM tiles. A share URL restores the box, date, optional end date, and hour — it does **not** auto-score.
 
 ## How a session works
 
 ```mermaid
 flowchart LR
-  A["1. Search or draw<br/>US box under 45 mi²"] --> B["2. Pick hour<br/>2024-07-15 15:00"]
-  B --> C["3. Score area<br/>FortyGuard TCM"]
-  C --> D["4. Read layers<br/>SVI · shade · cooling"]
+  A["1. Search or draw<br/>US box under 45 mi²"] --> B["2. Day or Range<br/>From + Hour · To ≤ 7 days"]
+  B --> C["3. Score area<br/>TCM + duration"]
+  C --> D["4. Read layers<br/>SVI · shade · walk"]
   D --> E["5. Decide<br/>trees / pavement"]
 ```
 
 1. Open **`/app`** (or **Score a neighborhood** from `/`). **Search** a US city or neighborhood, or click **Draw area** and drag a box (Space pans, scroll still zooms). Stay under **45 mi²**.
-2. Leave **date 2024-07-15** and **hour 15:00** for the demo (historic summer; Phoenix 2026-08-17 can return 0 tiles and still bill).
-3. Click **Score area**. Heatmap appears first. SVI, OSM, and satellite follow. The brief starts as a template, then rewrites. Export when you want a file.
-4. Toggle **Isolines / SVI / Shade / Cooling**. Switch **Flat → 3D heat** and right-drag to orbit.
+2. Leave **From = 2024-07-15** and **Hour = 15:00** for the demo (historic summer; Phoenix 2026-08-17 can return 0 tiles and still bill). **Day** scores one date. **Range** adds **To** (max 7 inclusive days). TCM, shade, and comfort always use **From + Hour**.
+3. Click **Score area**. Heatmap appears first. SVI, OSM, walk, and satellite follow. The brief starts as a template, then rewrites. Export when you want a file.
+4. Toggle **Isolines / SVI / Shade / Cooling / Walk**. Switch **Flat → 3D heat** and right-drag to orbit.
 5. Use **+10% / +20% canopy** only as a labeled estimate. FortyGuard does **not** recompute.
+
+Duration mapping (honest FortyGuard `filter_type`):
+
+| UI | Duration request | TCM / shade / comfort |
+|---|---|---|
+| **Day** (From = To) | `filter_type=3`, no `end_date` (existing one-day caches still hit) | From + Hour (`filter_type=1`) |
+| **Range** 2–7 days | `end_date` + `filter_type=4` (range-of-days product, not a custom 3-day exceedance) | Still From + Hour |
+
+**Range ΔT:** when From ≠ To, Score also fetches a second TCM at **To + the same Hour** and maps **ΔT (range)** (To − From) plus noisy **ΔT edges** (|∇ΔT|). Positive tiles got hotter. **Play** only cycles Hour as a preview; it does **not** recompute ΔT or run Score.
 
 ---
 
@@ -110,16 +122,19 @@ flowchart TB
   subgraph heat [FortyGuard]
     T["Heat tiles · TCM °C"]
     X["Exceedance · hours ≥ 35 °C"]
+    P["Persistence · longest streak"]
   end
   subgraph context [Public context]
     S["SVI · CDC/ATSDR 2022"]
     H["Shade · OSM + sun"]
     C["Cooling · OSM libraries"]
+    W["Walk · OSRM to indoor"]
   end
   T --> S
   X --> S
   T --> H
   T --> C
+  C --> W
 ```
 
 ### Header
@@ -127,8 +142,12 @@ flowchart TB
 | Control | What it does | Example |
 |---|---|---|
 | **Search** | Nominatim, US only | Type `Houston EaDo` → pick East Downtown |
-| **Date / Hour** | Historic FortyGuard snapshot | `2024-07-15` `15:00` — afternoon peak for the video |
-| **Score area** | Runs TCM + exceedance on the drawn polygon | Enabled only when the box is 0.04–45 mi² |
+| **Day / Range** | One date vs From–To (max 7 days) | Range: From `2024-07-15` To `2024-07-18` |
+| **Date / From / To / Hour** | Historic snapshot + duration window | Demo: `2024-07-15` `15:00` |
+| **Play** | Cycles Hour only (Range). Does not Score, does not recompute ΔT | Preview afternoon vs evening before you spend credits |
+| **Score area** | TCM + exceedance + persistence on the drawn polygon | Enabled only when the box is 0.04–45 mi² |
+| **Export** | Client downloads after Score | JSON, GeoJSON, brief `.txt` — no API keys |
+| **Scorecard** | Opens the right drawer (large screens) or bottom sheet (narrow) | Sits next to Export when the drawer is hidden |
 
 ### Tools
 
@@ -148,7 +167,7 @@ flowchart TB
 
 ![3D heat: pitched East Downtown with the same 37.1 °C hotspot](docs/images/heatcast-3d.png)
 
-On the map chrome after Score: **Air temperature** vs **Hours above threshold** switches the raster between TCM °C and exceedance hours.
+On the map chrome after Score: **Air temperature** vs **Hours above threshold** vs **Longest streak**. After a Range Score, also **ΔT (range)** and **ΔT edges**.
 
 ### Layers
 
@@ -157,21 +176,25 @@ On the map chrome after Score: **Air temperature** vs **Hours above threshold** 
 | **Isolines** | Contours burned into the heat canvas | °C lines (e.g. 33.5–36.0) | Seeing gradients inside the box | Claiming sidewalk precision |
 | **SVI** | CDC/ATSDR 2022, SVG overlay | Violet tracts; click a tract | Equity: Tract 3123 at 94th percentile | Calling SVI a FortyGuard product |
 | **Shade** | OSM footprints + SunCalc | Footprints + umbra | “Is there any building shade at 15:00?” | FG-measured shade or tree canopies |
-| **Cooling** | OSM libraries / community centres | Named markers | “HPL Express is in the box” | Official cooling-center registries |
+| **Cooling** | OSM libraries / community centres | Icon-only markers | “HPL Express is in the box” | Official cooling-center registries |
+| **Walk** | OSRM walking, SVG polyline | Hotspot → indoor site + Area-card legend | “How far is indoor space from the hotspot?” | Citywide cool-commute planning |
 
 ![SVI (violet) and cooling pins (library / social facility) over the scored box](docs/images/heatcast-shade-cooling.png)
 
-Toggles stay usable as soon as Score returns. Labels show **Shade…** / **Cooling…** while Overpass loads.
+Toggles stay usable as soon as Score returns. Labels show **Shade…** / **Cooling…** while Overpass loads. Walk legend lives in the left-rail **Area** card (`Hotspot → {site}` + minutes), not as a wide map pill.
 
-### Right panel (scorecard)
+### Right panel (scorecard overlay)
+
+One right drawer (~21 rem) overlays the map. Header stays full width (`inset-x-4`); it does **not** shrink when the drawer opens. Tabs after Score: **Duration** (or **Day** + **Range** when From ≠ To) · **Place** · **Brief**. Narrow screens use the same tabs in a bottom sheet.
 
 | Block | What it is | Example from EaDo |
 |---|---|---|
-| **Rain context** | Open-Meteo daily/hour precip; optional FEMA zone | 0.4 mm — not a flood model |
-| **Heat index · shade** | Open-Meteo T+RH (NWS category) + sun altitude | 37.5 °C danger vs FG hotspot 37.1 °C |
+| **Duration charts** | Share ≥ threshold bar, hours-vs-streak bars, hours histogram | Already-fetched layers — not a new heatmap |
+| **Unrelieved-heat ratio** | Mean streak ÷ mean hours, clipped 0–1 | Gauge + method blurb (NIOSH / OSHA cite) |
 | **Scorecard** | Mean/max °C and hours ≥ threshold | 5.09 h mean, 8.46 h max |
+| **Range ΔT** | To − From at the scored Hour | Mean ΔT on the Range tab; map toggles for tiles / edges |
 | **Heat × vulnerability** | SVI joined to tiles | Tract 3123, priority 0.71 |
-| **Cooling sites** | OSM list | Library, Star of Hope |
+| **Cooling sites** | OSM list + walk | Library, Star of Hope |
 | **Tree canopy slider** | Air CE ~0.015 °C per 1% canopy, cap 2 °C | +20% → about −0.30 °C on the overlay |
 | **Planner brief** | Template immediately; DeepSeek after satellite+SVI | EPA / i-Tree only when percents exist |
 | **Coverage** | Tile count, cached vs live, datetime | `live · 417 tiles · 2024-07-15T15:00` |
@@ -181,15 +204,16 @@ Toggles stay usable as soon as Score returns. Labels show **Shade…** / **Cooli
 
 ## Honesty (do not weaken for the video)
 
-- FortyGuard is **central**. Tiles are ~100 m neighborhood UHI, not sidewalk CFD.
-- Coverage is **United States only**. Area cap **~45 mi²**. We ship **100 m** granularity.
+- FortyGuard is **central**. Tiles are ~100 m neighborhood UHI, not sidewalk CFD. It is **one API** among several (CDC SVI, OSM, OSRM, Open-Meteo). Coverage is **United States only**.
+- Area cap **~45 mi²**. We ship **100 m** granularity. Area mi² uses WGS84 metres-per-degree with **cos(lat)** on longitude.
 - The canopy slider is a **literature overlay** (~0.015 °C air per 1% canopy, band 0.10–0.20 °C per +10 points, cap 2 °C). **Not** a new FortyGuard heatmap. Do **not** use LST CE (~0.075 °C per 1%).
-- `heat_index_celsius` from FG `env_params` is humidity at a fixed T, not a diurnal curve. Duration = **exceedance hours**. Afternoon comfort chip = **Open-Meteo**.
+- `heat_index_celsius` from FG `env_params` is humidity at a fixed T, not a diurnal curve. Duration = **exceedance hours** + **persistence streak**. Afternoon comfort chip = **Open-Meteo**.
 - Phoenix **`2026-08-17` can complete with 0 tiles and still be billed**. Coverage miss, not 0 °C. Demo date: **`2024-07-15 15:00`**.
 - Failed FG tasks are free; **empty successful heatmaps still cost**. Cache AOI + datetime + analytic type.
-- OSM libraries are **not** an official cooling-center registry. Shade is geometry, not a FortyGuard product.
+- OSM libraries are **not** an official cooling-center registry. Shade is geometry, not a FortyGuard product. Walk is OSRM to the nearest indoor OSM site, not a cool-route optimizer.
+- Range ΔT is two TCM snapshots at one clock hour. ΔT edges are noisy 100 m gradients, not a heat flux. Play does not animate N deltas.
 
-Do **not** expand into India, walking routes / OSRM, bus-stop clones, UTCI, NWS HeatRisk, deck.gl, or a second product.
+Do **not** expand into India, UTCI, NWS HeatRisk, deck.gl, bus-stop clones, a citywide cool-route app, or a second product.
 
 ---
 
@@ -209,10 +233,11 @@ flowchart LR
     UI[Search draw Score layers]
   end
   subgraph api [FastAPI :8000]
-    A["POST /v1/analyze\nTCM + exceedance + template brief"]
+    A["POST /v1/analyze\nTCM + duration + template brief"]
     S["POST /v1/svi"]
     E["POST /v1/enrich\nsatellite + env first"]
     O["GET cooling / buildings"]
+    W["GET /v1/walk\nOSRM"]
     B["POST /v1/brief\nDeepSeek after layers"]
   end
   FG[FortyGuard Premium]
@@ -220,6 +245,7 @@ flowchart LR
   UI --> S
   UI --> E --> FG
   UI --> O
+  UI --> W
   UI --> B
 ```
 
@@ -252,7 +278,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000**. Repeat the East Downtown example above. Hard-refresh after `package.json` changes.
+Open **http://localhost:3000** (landing), then **Score a neighborhood** → **http://localhost:3000/app**. Method is `/method`. Repeat the East Downtown example above. Hard-refresh after `package.json` changes.
 
 ### Env (`api/.env` — gitignored)
 
@@ -287,7 +313,8 @@ Demo presets in `api/app/cities.py`: Houston EaDo, Houston Museum District, Phoe
 | GET | `/health` | Liveness |
 | GET | `/v1/cities` | Presets + scenario model meta |
 | GET | `/v1/geocode` | Nominatim, `countrycodes=us` |
-| POST | `/v1/analyze` | TCM + exceedance + scorecard + **template** memo. Must not wait on enrich or LLM. |
+| POST | `/v1/analyze` | TCM + exceedance + persistence + optional Range ΔT + scorecard + **template** memo. Must not wait on enrich or LLM. Same day: duration `filter_type=3`. 2–7 days: `end_date` + `filter_type=4`. |
+| GET | `/v1/walk` | OSRM walking, US-only, fail-open. Hotspot → indoor OSM site. |
 | POST | `/v1/brief` | Rewrite planner brief after satellite / SVI / OSM. |
 | POST | `/v1/enrich` | Satellite + env (~45 s), then optional streetview / PDF (~12 s). Fail-open. |
 | POST | `/v1/svi` | CDC/ATSDR SVI 2022 tracts joined to heatmap |
@@ -299,20 +326,20 @@ Demo presets in `api/app/cities.py`: Houston EaDo, Houston Museum District, Phoe
 | GET | `/v1/credits` | Key usage, secrets stripped |
 | GET | `/v1/outputs/{file}` | Heat-intelligence PDF |
 
-FortyGuard Premium (server-side): `tcm`, `exceedance`, `environmental_parameters`, `satellite_segmentation`, `street_view_segmentation` (often times out), `heat_intelligence` PDF.
+FortyGuard Premium (server-side): `tcm`, `exceedance`, `persistence`, `environmental_parameters`, `satellite_segmentation`, `street_view_segmentation` (often times out), `heat_intelligence` PDF.
 
-Non-FG: Open-Meteo, OSM Overpass, FEMA NFHL, USGS 3DEP, CDC/ATSDR SVI 2022, optional DeepSeek.
+Non-FG: Open-Meteo, OSM Overpass, OSRM, FEMA NFHL, USGS 3DEP, CDC/ATSDR SVI 2022, optional DeepSeek.
 
 ---
 
 ## Map implementation (do not “simplify”)
 
-Reverting these makes heat/SVI/shade vanish or slide off-screen.
+Reverting these makes heat/SVI/shade/walk vanish or slide off-screen.
 
 1. Heat fill is a **canvas raster** draped as MapLibre **image** source `heatcast-raster`. Do not redraw heat polygons on every `render`.
 2. Do not `flyTo` on every AOI drag. Scroll zoom always on. Draw = left-drag. Space pans.
 3. Cyan AOI mask is an **SVG quad** from four `map.project` corners.
-4. MapLibre fill/line layers do **not** show reliably. SVI and shade are **SVG**. Isolines are **burned into** the heat canvas. Cooling uses **react-map-gl Marker**.
+4. MapLibre fill/line layers do **not** show reliably. SVI and shade are **SVG**. Isolines are **burned into** the heat canvas. Cooling uses **react-map-gl Marker**. Walk is an **SVG polyline**. Trees are **Marker**.
 5. Native `dragRotate` slides heat off-screen. Custom orbit uses `easeTo({ around })`. `jumpTo` ignores `around`.
 
 Full gotcha list: [HANDOVER.md](./HANDOVER.md).
@@ -326,14 +353,16 @@ Full gotcha list: [HANDOVER.md](./HANDOVER.md).
 - Keys in **server env**, not the frontend. Add the public web origin to CORS (today localhost-only).
 - Set `NEXT_PUBLIC_API_URL` at **build** time for the web service.
 
+Public Render is **not shipped**. Demo caches are **not frozen**. The ~3 min video and ~500-word summary are **not started**. Deadline **30 Aug 2026**.
+
 ---
 
 ## Research and product locks
 
 | File | Role |
 |---|---|
-| [HANDOVER.md](./HANDOVER.md) | Living status, changelog, open work, map gotchas |
-| [RESEARCH-3D-URBAN.md](./RESEARCH-3D-URBAN.md) | Current product lock (Track 1) |
+| [HANDOVER.md](./HANDOVER.md) | Living status, changelog, open work, map gotchas. **Wins** if research still says “no OSRM”. |
+| [RESEARCH-3D-URBAN.md](./RESEARCH-3D-URBAN.md) | Current product lock (Track 1). Walk/OSRM lines there are superseded. |
 | [RESEARCH-SIMULATOR.md](./RESEARCH-SIMULATOR.md) | API + scenario formula |
 | [RESEARCH-PIVOT.md](./RESEARCH-PIVOT.md) | Superseded Track 3 hero; keep FG date/cache rules only |
 

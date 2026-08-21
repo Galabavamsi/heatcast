@@ -33,22 +33,24 @@ Suggested commit trailers (optional): `Handover: snapshot + changelog`.
 
 ## Snapshot — overwrite this block
 
-**As of 21 Aug 2026**
+**As of 21 Aug 2026** (docs commit; product already on `main` as `515b8ff`)
 
-HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The map scores a **drawn US AOI** on 2 m air tiles (TCM) plus **exceedance** (total hours) and **persistence** (longest consecutive streak), then an **unrelieved-heat ratio** (streak ÷ hours, HeatCast index 0–1), then overlays SVI / shade / indoor cool space / OSRM walk / a tree sketch, and a planner brief. Client-side **Export** writes JSON / GeoJSON / brief after Score (satellite omitted if still null). Share URLs restore bbox+date+end+time; they do **not** auto-score. FortyGuard is one measurement API, not the product name in every chip.
+HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The map scores a **drawn US AOI** on 2 m air tiles (TCM) plus **exceedance** (total hours) and **persistence** (longest consecutive streak), then an **unrelieved-heat ratio** (streak ÷ hours, HeatCast index 0–1), then overlays SVI / shade / indoor cool space / OSRM walk / a tree sketch, and a planner brief. Client-side **Export** writes JSON / GeoJSON / brief `.txt` after Score (satellite omitted if still null). Share URLs restore bbox+date+end+time (`/app?west=&south=&east=&north=&date=&end=&time=`); they do **not** auto-score. FortyGuard is one measurement API, not the product name in every chip.
 
 | Area | State |
 |---|---|
-| Site | Working. `/` product page (duration / indoor / planting beats + CTA). `/app` is the map. `/method` is honest layer notes. Header: HeatCast · Score · Method. |
+| Site | Working. `/` product page (duration / indoor walk / planting beats + CTA). `/app` is the map. `/method` is honest layer notes (hours vs streak, unrelieved ratio, Range ΔT, OSRM walk). Nav: HeatCast · Score · Method. |
 | Score / heatmap | Working. Canvas raster image source. Demo **From=To=`2024-07-15` 15:00**. |
-| Date range | Working. From + To + Hour. Same day → duration `filter_type=3` (one day, existing caches). 2–7 days → `end_date` + `filter_type=4` (range-of-days product). Capped at 7 inclusive days. TCM / shade / comfort still use From + Hour. Not a custom 3-day exceedance. |
+| Date range | Working. Header **Day \| Range**. Day = one date. Range = From + To + Hour, cap **7 inclusive days**. Same day → duration `filter_type=3` (no `end_date`, existing caches). 2–7 days → `end_date` + `filter_type=4` (range-of-days product). TCM / shade / comfort still use **From + Hour**. Not a custom 3-day exceedance. |
+| Range ΔT | Working when From ≠ To. Second TCM at **To + the scored Hour**. Map: **ΔT (range)** (To − From) and noisy **ΔT edges** (\|∇ΔT\|). **Play** cycles Hour only; it does not Score and does not recompute ΔT. |
 | Draw / pan / orbit | Working. Custom orbit `easeTo({ around })`. Native `dragRotate` stays off. Query-param restore sets view **once**; AOI drag does not `flyTo`. |
-| Layout | `/app` large screens: left Tools/View/Layers/Area (`w-[10.25rem]`); **one right drawer** (~21rem) with `Duration \| Place \| Brief` (default **Duration** after Score). Header is always `inset-x-4` (does not shrink when the drawer opens). Drawer overlays the map. Collapsed control is a labeled **Scorecard** glass button (`top-24 right-4`), not a bare chevron. Last tab is component state. Narrow: same tabs in a bottom sheet. Place/Brief after Score. Area mi² lives in the left rail (no floating AOI mi² label on the map). Walk legend is a wrapping 2-line block **inside the Area card**; pan/draw hint sits **below How to** in the same stack (not a `left-20` map overlay). |
+| Layout | `/app` large screens: left Tools/View/Layers/Area (`w-[10.25rem]`); **one right drawer** (~21rem) overlays the map. After Score the drawer tabs are `Duration \| Place \| Brief`, or `Range \| Day \| Place \| Brief` when From ≠ To (default Duration/Day). Header is always `inset-x-4` (does not shrink when the drawer opens). When the drawer is hidden, a labeled **Scorecard** button sits in the **header next to Export** (not a floating `top-24 right-4` chevron). Last tab is component state. Narrow: same tabs in a bottom sheet; collapsed control is **Scorecard** at `bottom-4 right-4`. Place/Brief after Score. Area mi² lives in the left rail (no floating AOI mi² label on the map). Walk legend is a wrapping 2-line block **inside the Area card**; pan/draw hint sits **below How to** in the same stack (not a `left-20` map overlay). |
 | Layers | Isolines (canvas), SVI (SVG), Shade (SVG), Cooling (**icon-only Markers**, text only on the walk destination; sports centres dimmer), **Walk (SVG polyline)**, **planted trees (Markers)**. Amenities within ~40px of the hotspot are nudged south. Toggles enabled whenever `analysis` exists. |
-| Duration | Exceedance + persistence fetched **in parallel** with TCM. Map toggle: Air temperature / Hours above / Longest streak. **Range (From ≠ To)** also fetches a second TCM at To + the same Hour and maps **ΔT (range)** plus noisy **ΔT edges** (|∇ΔT|). Scorecard: share ≥ threshold **progress bar**, hours-vs-streak bars, hours histogram, **unrelieved-heat ratio** gauge (mean streak ÷ mean hours, 0–1). Not a new heatmap. |
-| Walk | `GET /v1/walk` → OSRM walking (`overview=full`), US-only, fail-open. SVG polyline with A/B dots (MapLibre lines do not show). Hotspot → nearest OSM **library / community centre / social facility / town hall** (haversine). Sports centres stay on the map but are not walk destinations. Legend lives in the left-rail Area card: `Hotspot → {site}` + `{N} min` (wraps; not a wide map pill). |
+| Duration | Exceedance + persistence fetched **in parallel** with TCM. Map toggle: Air temperature / Hours above / Longest streak. Scorecard: share ≥ threshold **progress bar**, hours-vs-streak bars, hours histogram, **unrelieved-heat ratio** gauge (mean streak ÷ mean hours, 0–1). Split overlay: snapshot °C stays on Day; hours/streak/histogram move to Range when From ≠ To. Not a new heatmap. |
+| Walk | Shipped. `GET /v1/walk` → OSRM walking (`overview=full`), US-only, fail-open. SVG polyline with A/B dots (MapLibre lines do not show). Hotspot → nearest OSM **library / community centre / social facility / town hall** (haversine). Sports centres stay on the map but are not walk destinations. Legend lives in the left-rail Area card: `Hotspot → {site}` + `{N} min` (wraps; not a wide map pill). |
 | Tree sketch | Click-to-plant + “Hottest tiles” seed. Slider still does literature ΔT. Pins are visual, not a new heatmap. Dismissible plant hint. Escape closes plant mode / search hits. |
-| Export | Client-only (`web/src/lib/export.ts`). Scorecard JSON, AOI+hotspot GeoJSON, planner brief `.txt`, optional exceedance/TCM FeatureCollection. Copy brief + share link. No API keys. Stays in the header. |
+| Export | Client-only (`web/src/lib/export.ts`). Header menu next to Score area / Scorecard: scorecard JSON, AOI+hotspot GeoJSON, planner brief `.txt`, optional exceedance/TCM FeatureCollection. Copy brief + share link. No API keys. |
+| Area | WGS84 metres-per-degree with **cos(lat)** on longitude (`web/src/lib/aoi.ts` = `api/app/geo.py`). Houston share-URL box ≈ **2.20 mi²**. Cap 45 mi². |
 | Copy | User-facing chips say air tiles / SVI / OSM / OSRM. Cite FortyGuard once in coverage if needed. |
 | Planner brief | Analyze writes a **template** immediately. Client calls `POST /v1/brief` after enrich + SVI (and cooling/shade if ready). DeepSeek `deepseek-v4-flash` if `LLM_*` is set. Null layers are stripped so the model cannot refuse EPA/i-Tree just because flood is missing. Lives in the right-drawer **Brief** tab (not Duration). |
 | Enrich | Satellite + env first (~45 s), streetview/PDF extra (~12 s), pool `shutdown(wait=False)`. Browser abort **80 s**. Streetview timeouts are not a red banner if satellite/env arrived. Hottest-tile satellite stack stays in Brief. |
@@ -56,9 +58,9 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 | LLM | Server-only. Model **`deepseek-v4-flash`** (this key also has `deepseek-v4-pro`; no `deepseek-chat`). |
 | Public deploy | **Not shipped.** CORS is localhost-only. Render needs `0.0.0.0:$PORT`, server env keys, CORS + `NEXT_PUBLIC_API_URL`. |
 | Judging caches | **Not frozen.** EaDo / Museum / Phoenix `2024-07-15` should be cached before demo day. One-day duration cache keys are unchanged. |
-| Video + 500-word summary | **Not started.** |
+| Video + 500-word summary | **Not started.** Deadline **30 Aug 2026**. |
 
-**Do not start:** UTCI, NWS HeatRisk, deck.gl, India, bus-stop clones, claiming the tree pins are a new satellite/heatmap run.
+**Do not start:** UTCI, NWS HeatRisk, deck.gl, India, bus-stop clones, a citywide cool-route app, claiming the tree pins are a new satellite/heatmap run. Walk/OSRM to indoor public space is **already shipped** — do not rip it out because older RESEARCH files said “no walking”.
 
 ---
 
@@ -66,6 +68,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 
 | Date | Who | What |
 |---|---|---|
+| 2026-08-21 | Vamsi / agent | README + HANDOVER: docs match shipped Day\|Range, ΔT tiles, unrelieved ratio, OSRM walk, duration charts, Scorecard next to Export, Houston URL box ≈ 2.20 mi². Dropped “do not start walking/OSRM”. |
 | 2026-08-21 | Vamsi / agent | Range ΔT: second TCM at To + scored Hour; map toggles ΔT (range) / ΔT edges; Play does not recompute ΔT. |
 | 2026-08-21 | Vamsi / agent | Scorecard collapse: labeled **Scorecard** button (`top-24 right-4`); header stays `inset-x-4` so toggling the drawer no longer jumps search/dates (`lg:right-[22rem]` removed). |
 | 2026-08-21 | Vamsi / agent | Walk legend + pan hint moved into the left rail (Area card / below How to) so they no longer overlay Area at `left-20`. |
@@ -189,7 +192,7 @@ web/src/components/ScoreApp.tsx  Score, brief, layers, duration charts, export
 web/src/components/UnrelievedChip.tsx  Scorecard chip
 web/src/components/HeatMap.tsx   map (fragile)
 web/src/lib/export.ts    Client Blob downloads
-web/src/lib/share.ts     `/app?west=&south=&east=&north=&date=&time=`
+web/src/lib/share.ts     `/app?west=&south=&east=&north=&date=&end=&time=`
 web/src/lib/unrelieved.ts Client formula + method blurb
 web/src/lib/histogram.ts hours bins + hotspot-tile join
 web/src/lib/landcover.ts satellite stacked-bar slices
@@ -266,7 +269,7 @@ SunCalc **v2** returns **degrees**, azimuth clockwise from north. Houston 15:00 
 10. 0 tiles + completed `activity_id` = coverage miss, not 0 °C.
 11. Do not wait on streetview / heat-intelligence for the enrich HTTP response to return satellite buckets.
 12. AOI mi² = WGS84 mid-lat rectangle with **cos(lat)** on longitude (`web/src/lib/aoi.ts` `areaMi2` = `api/app/geo.py` `polygon_area_mi2`). Not EPSG:3857. Houston `west=-95.40236&south=29.73387&east=-95.37434&north=29.75282` is **≈ 2.20 mi²**, not 2.59.
-13. `/app` header is always `inset-x-4`. Do **not** add `lg:right-[22rem]` when the scorecard is open — that shrinks search/dates. Drawer overlays the map. Collapsed control is a labeled **Scorecard** button, not a bare chevron.
+13. `/app` header is always `inset-x-4`. Do **not** add `lg:right-[22rem]` when the scorecard is open — that shrinks search/dates. Drawer overlays the map. Collapsed **Scorecard** lives in the **header next to Export** (large screens), not a floating `top-24 right-4` chevron. Narrow collapsed control stays `bottom-4 right-4`.
 
 Older note (partially superseded): legend vs blank MapLibre **fill** was fixed by abandoning fill layers for heat and using the canvas raster. If heat is blank again, check the image source, not a GeoJSON fill under buildings.
 
