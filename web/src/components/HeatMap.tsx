@@ -304,11 +304,12 @@ function rampColor(t: number, ramp: typeof RAMP = RAMP): [number, number, number
   ];
 }
 
-/** Public Carto basemap key only. Unkeyed cartocdn tiles 200 with a full-map watermark. */
+/** Public Carto basemap key only. Unkeyed cartocdn tiles 200 with a watermark — never fetch them without a key. */
 const CARTO_API_KEY = (process.env.NEXT_PUBLIC_CARTO_API_KEY ?? "").trim();
 
-const ESRI_DARK_TILES = [
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+/** Keyless Esri World Imagery — streets/buildings visible. World Dark Gray is outlines-only and looks blank. */
+const ESRI_IMAGERY_TILES = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 ];
 
 function cartoDarkTiles(apiKey: string): string[] {
@@ -322,7 +323,7 @@ function cartoDarkTiles(apiKey: string): string[] {
 
 function rasterStyle(useEsri: boolean): StyleSpecification {
   const useCarto = Boolean(CARTO_API_KEY) && !useEsri;
-  const tiles = useCarto ? cartoDarkTiles(CARTO_API_KEY) : ESRI_DARK_TILES;
+  const tiles = useCarto ? cartoDarkTiles(CARTO_API_KEY) : ESRI_IMAGERY_TILES;
   return {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
@@ -331,12 +332,27 @@ function rasterStyle(useEsri: boolean): StyleSpecification {
         type: "raster",
         tiles,
         tileSize: 256,
-        attribution: useCarto ? "© OpenStreetMap © CARTO" : "Tiles © Esri",
+        maxzoom: 19,
+        attribution: useCarto
+          ? "© OpenStreetMap © CARTO"
+          : "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
       },
     },
     layers: [
       { id: "background", type: "background", paint: { "background-color": "#0b0d10" } },
-      { id: "basemap", type: "raster", source: "basemap", paint: { "raster-saturation": -0.15, "raster-opacity": 0.92 } },
+      {
+        id: "basemap",
+        type: "raster",
+        source: "basemap",
+        paint: useCarto
+          ? { "raster-saturation": -0.15, "raster-opacity": 0.92 }
+          : {
+              "raster-saturation": -0.28,
+              "raster-brightness-max": 0.7,
+              "raster-contrast": 0.08,
+              "raster-opacity": 0.9,
+            },
+      },
     ],
   };
 }
