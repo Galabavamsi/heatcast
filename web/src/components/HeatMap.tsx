@@ -14,10 +14,12 @@ const EMPTY_FC: FeatureCollection = { type: "FeatureCollection", features: [] };
 const TEMP_KEYS = ["temperature", "max_temperature", "average_temperature"] as const;
 const HOURS_KEYS = ["hours", "hours_above", "value"] as const;
 
-const FILL_ALPHA = 0.78;
-const RASTER_OPACITY = 0.74;
+const FILL_ALPHA = 0.42;
+const RASTER_OPACITY = 0.75;
 const HEAT_IMAGE_ID = "heatcast-image";
 const HEAT_RASTER_ID = "heatcast-raster";
+const TRANSPORT_LAYER_ID = "esri-transport";
+const PLACES_LAYER_ID = "esri-places";
 const BUILDING_SOURCE_ID = "heatcast-buildings";
 const BUILDING_LAYER_ID = "heatcast-buildings-3d";
 const VOLUME_SOURCE_ID = "heatcast-volume";
@@ -36,11 +38,13 @@ const RASTER_LONG_EDGE = 2048;
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
+/** Cool → hot: violet/blue → orange → yellow (webinar-style, no near-black crimson). */
 const RAMP: [number, [number, number, number]][] = [
-  [0, [250, 204, 21]],
-  [0.33, [234, 88, 12]],
-  [0.66, [185, 28, 28]],
-  [1, [127, 29, 29]],
+  [0, [91, 33, 182]],
+  [0.22, [37, 99, 235]],
+  [0.48, [249, 115, 22]],
+  [0.74, [251, 191, 36]],
+  [1, [254, 240, 138]],
 ];
 
 const DIVERGING_RAMP: [number, [number, number, number]][] = [
@@ -311,6 +315,14 @@ const CARTO_API_KEY = (process.env.NEXT_PUBLIC_CARTO_API_KEY ?? "").trim();
 const ESRI_IMAGERY_TILES = [
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 ];
+const ESRI_TRANSPORT_TILES = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+];
+const ESRI_PLACES_TILES = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+];
+const ESRI_ATTRIBUTION =
+  "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community";
 
 function cartoDarkTiles(apiKey: string): string[] {
   const q = `?api_key=${encodeURIComponent(apiKey)}`;
@@ -333,10 +345,26 @@ function rasterStyle(useEsri: boolean): StyleSpecification {
         tiles,
         tileSize: 256,
         maxzoom: 19,
-        attribution: useCarto
-          ? "© OpenStreetMap © CARTO"
-          : "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        attribution: useCarto ? "© OpenStreetMap © CARTO" : ESRI_ATTRIBUTION,
       },
+      ...(useCarto
+        ? {}
+        : {
+            "esri-transport": {
+              type: "raster" as const,
+              tiles: ESRI_TRANSPORT_TILES,
+              tileSize: 256,
+              maxzoom: 19,
+              attribution: "Esri",
+            },
+            "esri-places": {
+              type: "raster" as const,
+              tiles: ESRI_PLACES_TILES,
+              tileSize: 256,
+              maxzoom: 19,
+              attribution: "Esri",
+            },
+          }),
     },
     layers: [
       { id: "background", type: "background", paint: { "background-color": "#0b0d10" } },
@@ -353,6 +381,22 @@ function rasterStyle(useEsri: boolean): StyleSpecification {
               "raster-opacity": 0.9,
             },
       },
+      ...(useCarto
+        ? []
+        : [
+            {
+              id: TRANSPORT_LAYER_ID,
+              type: "raster" as const,
+              source: "esri-transport",
+              paint: { "raster-opacity": 0.88 },
+            },
+            {
+              id: PLACES_LAYER_ID,
+              type: "raster" as const,
+              source: "esri-places",
+              paint: { "raster-opacity": 1 },
+            },
+          ]),
     ],
   };
 }
@@ -456,8 +500,8 @@ function paintIsolines(
   h: number,
 ) {
   if (!lines.features.length) return;
-  const halo = Math.max(3.4, Math.min(w, h) / 240);
-  const core = Math.max(1.7, halo * 0.45);
+  const halo = Math.max(1.2, Math.min(w, h) / 480);
+  const core = Math.max(0.55, halo * 0.38);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   const stroke = (color: string, width: number) => {
@@ -487,8 +531,8 @@ function paintIsolines(
       }
     }
   };
-  stroke("rgba(255,255,255,0.96)", halo);
-  stroke("rgba(8,47,73,0.98)", core);
+  stroke("rgba(248,250,252,0.28)", halo);
+  stroke("rgba(241,245,249,0.18)", core);
 }
 
 function paintHeatTiles(
@@ -505,7 +549,7 @@ function paintHeatTiles(
   ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.filter = `blur(${Math.max(0.8, Math.min(w, h) / 1400)}px)`;
+  ctx.filter = "blur(1px)";
   const project = projectFactory(bounds, w, h);
   const keys = prop === "hours" ? ([...HOURS_KEYS, ...TEMP_KEYS] as const) : TEMP_KEYS;
   const span = domain.max - domain.min || 1;
@@ -515,8 +559,12 @@ function paintHeatTiles(
     const t = val == null ? 0.5 : (val - domain.min) / span;
     const [r, g, b] = rampColor(t, ramp);
     ctx.fillStyle = `rgba(${r},${g},${b},${FILL_ALPHA})`;
+    ctx.strokeStyle = `rgba(${r},${g},${b},${FILL_ALPHA * 0.45})`;
+    ctx.lineWidth = 1.15;
+    ctx.lineJoin = "round";
     if (!drawFeaturePath(ctx, ft.geometry, project)) continue;
     ctx.fill("evenodd");
+    ctx.stroke();
   }
   ctx.filter = "none";
   if (isolines?.features.length) paintIsolines(ctx, isolines, project, w, h);
@@ -580,16 +628,18 @@ function applyHeatRaster(
     const src = map.getSource(HEAT_IMAGE_ID) as HeatImageSource | undefined;
     src?.updateImage({ image: cache.image, coordinates: cache.coordinates });
     if (!map.getLayer(HEAT_RASTER_ID)) {
-      map.addLayer({
+      const heatLayer = {
         id: HEAT_RASTER_ID,
-        type: "raster",
+        type: "raster" as const,
         source: HEAT_IMAGE_ID,
         paint: {
-          "raster-fade-duration": 0,
+          "raster-fade-duration": 280,
           "raster-opacity": rasterOpacity,
           "raster-resampling": "linear",
         },
-      });
+      };
+      if (map.getLayer(PLACES_LAYER_ID)) map.addLayer(heatLayer, PLACES_LAYER_ID);
+      else map.addLayer(heatLayer);
     } else {
       map.setPaintProperty(HEAT_RASTER_ID, "raster-opacity", rasterOpacity);
     }
@@ -828,12 +878,13 @@ function pickSviFeature(fc: FeatureCollection, lon: number, lat: number): Featur
 }
 
 function restackOverlayLayers(map: MapLibreMap) {
-  // Ground: buildings → heat raster → 3D volume.
-  // Overlays (must stay above volume): SVI fill/outlines → isoline halo/line/labels.
+  // Ground: buildings → heat raster → 3D volume → Esri place names (city labels win).
+  // Transportation stays in the style under heat. Overlays stay above places.
   const order = [
     BUILDING_LAYER_ID,
     HEAT_RASTER_ID,
     VOLUME_LAYER_ID,
+    PLACES_LAYER_ID,
     SVI_FILL_ID,
     SVI_LINE_ID,
     SVI_HIGHLIGHT_ID,
@@ -987,17 +1038,17 @@ function syncContourLayers(
       source: CONTOUR_SOURCE_ID,
       paint: {
         "line-color": "#f8fafc",
-        "line-width": 3.8,
-        "line-opacity": 0.92,
-        "line-blur": 0.05,
+        "line-width": 2.1,
+        "line-opacity": 0.38,
+        "line-blur": 0.2,
       },
       layout: { visibility: vis, "line-join": "round", "line-cap": "round" },
     });
   } else {
     map.setLayoutProperty(CONTOUR_HALO_ID, "visibility", vis);
     map.setPaintProperty(CONTOUR_HALO_ID, "line-color", "#f8fafc");
-    map.setPaintProperty(CONTOUR_HALO_ID, "line-width", 3.8);
-    map.setPaintProperty(CONTOUR_HALO_ID, "line-opacity", 0.92);
+    map.setPaintProperty(CONTOUR_HALO_ID, "line-width", 2.1);
+    map.setPaintProperty(CONTOUR_HALO_ID, "line-opacity", 0.38);
   }
   if (!map.getLayer(CONTOUR_LINE_ID)) {
     map.addLayer({
@@ -1005,17 +1056,17 @@ function syncContourLayers(
       type: "line",
       source: CONTOUR_SOURCE_ID,
       paint: {
-        "line-color": "#0e7490",
-        "line-width": 1.85,
-        "line-opacity": 1,
+        "line-color": "#e2e8f0",
+        "line-width": 0.95,
+        "line-opacity": 0.42,
       },
       layout: { visibility: vis, "line-join": "round", "line-cap": "round" },
     });
   } else {
     map.setLayoutProperty(CONTOUR_LINE_ID, "visibility", vis);
-    map.setPaintProperty(CONTOUR_LINE_ID, "line-color", "#0e7490");
-    map.setPaintProperty(CONTOUR_LINE_ID, "line-width", 1.85);
-    map.setPaintProperty(CONTOUR_LINE_ID, "line-opacity", 1);
+    map.setPaintProperty(CONTOUR_LINE_ID, "line-color", "#e2e8f0");
+    map.setPaintProperty(CONTOUR_LINE_ID, "line-width", 0.95);
+    map.setPaintProperty(CONTOUR_LINE_ID, "line-opacity", 0.42);
   }
   const textField: ExpressionSpecification = [
     "concat",
@@ -1519,7 +1570,7 @@ export default function HeatMap({
     try {
       const cache = buildRaster();
       syncBuildingLayers(map, buildingFc, volume);
-      applyHeatRaster(map, cache, logRasterOnce, sviVisible ? 0.52 : 0.82);
+      applyHeatRaster(map, cache, logRasterOnce, sviVisible ? 0.55 : RASTER_OPACITY);
       syncSviLayers(map, sviFc, sviVisible, selectedSviFips);
       syncContourLayers(
         map,
@@ -1980,7 +2031,7 @@ export default function HeatMap({
             : "Air temperature";
   const legendRamp = deltaMode
     ? "linear-gradient(to right, #2563eb, #f8fafc, #dc2626)"
-    : "linear-gradient(to right, #facc15, #ea580c, #b91c1c, #7f1d1d)";
+    : "linear-gradient(to right, #5b21b6, #2563eb, #f97316, #fbbf24, #fef08a)";
   const isoDigits = legendMin != null && legendMax != null && legendMax - legendMin < 1 ? 2 : 1;
 
   return (
