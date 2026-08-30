@@ -6,18 +6,11 @@ import { SourcePills } from "@/components/tools/ToolBits";
 
 const TOOLS = [
   {
-    href: "cooling",
-    title: "Cooling plan",
-    tag: "Neighborhood",
-    infer: "What-if canopy, cool-roof, and pavement sliders on the scored mean. Attribution of projected ΔT.",
-    not: "Not a new FortyGuard heatmap. Roof and pavement are literature air estimates.",
-  },
-  {
-    href: "walk",
-    title: "Walk exposure",
-    tag: "Access",
-    infer: "OSRM walk from the hotspot to the nearest indoor OSM site, sampled on nearest 2 m air tiles.",
-    not: "Not cargo, vaccines, WBGT, or OSHA. Not a citywide cool-route planner.",
+    href: "hours",
+    title: "Site hours",
+    tag: "Hour table",
+    infer: "Hour-by-hour Open-Meteo air, apparent temperature, humidity, and a cooling-demand proxy. After Score, FortyGuard mean sits beside the selected hour.",
+    not: "Not data-center PUE. Not a cached diurnal TCM grid.",
   },
   {
     href: "peak",
@@ -33,13 +26,35 @@ const TOOLS = [
     infer: "Hours when heat coincides with high humidity and/or Open-Meteo US AQI.",
     not: "Not FortyGuard env AQI. No CO2 or methane charts.",
   },
+  {
+    href: "shift",
+    title: "Shift window",
+    tag: "When to move",
+    infer: "Best cool / low-demand daylight hours from Open-Meteo heat + GHI. A 4-hour block to prefer, and the hottest block to avoid.",
+    not: "Not grid carbon, gCO2/kWh, Electricity Maps, or EIA.",
+  },
+  {
+    href: "cooling",
+    title: "Cooling plan",
+    tag: "Neighborhood",
+    infer: "What-if canopy, cool-roof, and pavement sliders on Open-Meteo air now, FortyGuard mean after Score. Attribution of projected ΔT.",
+    not: "Not a new FortyGuard heatmap. Roof and pavement are literature air estimates.",
+  },
+  {
+    href: "walk",
+    title: "Walk exposure",
+    tag: "Access",
+    infer: "OSRM walk from the neighborhood center (or hotspot after Score) to the nearest indoor OSM site. Tile air after Score.",
+    not: "Not cargo, vaccines, WBGT, or OSHA. Not a citywide cool-route planner.",
+  },
+  {
+    href: "district",
+    title: "District score",
+    tag: "HeatCast index",
+    infer: "0–100 HeatCast index from mean air, exceedance hours, and unrelieved streak. Optional CDC SVI overlay after Score.",
+    not: "Not insurance, not a FICO of heat, not a parametric payout.",
+  },
 ] as const;
-
-const SOON = [
-  { title: "Site hour table", note: "Tile-by-tile hour grid once we cache a full diurnal TCM — not faked." },
-  { title: "Carbon-aware window", note: "Needs a real grid-carbon series. Not invented kgCO2." },
-  { title: "Insurance heat score", note: "A portfolio index would be a new product. Not on this path." },
-];
 
 export default function ToolsHubPage() {
   const { shareQ, placeName, date, time, threshold, analysis, hours } = useTools();
@@ -50,8 +65,8 @@ export default function ToolsHubPage() {
         Tools on the same neighborhood score.
       </h1>
       <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-400">
-        HeatCast stays HeatCast. FortyGuard is the 2 m air and duration API. These views infer from tiles you
-        already score, plus Open-Meteo and OSRM — they do not clone other product names.
+        HeatCast stays HeatCast. FortyGuard is the 2 m air and duration API. These views infer from
+        Open-Meteo and OSM immediately, then add tiles you score — they do not clone other product names.
       </p>
       <div className="mt-4">
         <SourcePills
@@ -82,18 +97,6 @@ export default function ToolsHubPage() {
           </li>
         ))}
       </ul>
-
-      <section className="mt-12">
-        <h2 className="text-[10px] uppercase tracking-wide text-slate-500">Coming later — not faked</h2>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
-          {SOON.map((item) => (
-            <li key={item.title} className="rounded-xl border border-dashed border-[#2a313c] p-4">
-              <p className="text-sm font-medium text-slate-300">{item.title}</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{item.note}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

@@ -106,7 +106,7 @@ export default function MethodPage() {
             <div>
               <dt className="font-medium text-slate-100">Tools workspace</dt>
               <dd className="mt-1 text-slate-400">
-                A separate <code className="text-slate-300">/tools</code> hub — not scorecard tabs. Cooling plan attributes literature ΔT (canopy + labeled roof/pavement). Walk exposure samples nearest air tiles along the existing OSRM indoor walk. Peak hours are an Open-Meteo heat-load proxy plus FortyGuard duration after Score. Compound hours use Open-Meteo humidity and, when present, US AQI — never invented CO2 or methane.
+                A separate <code className="text-slate-300">/tools</code> hub — not scorecard tabs. Site hours is an Open-Meteo hourly table (air / apparent / humidity / cooling-demand proxy). Peak and compound stay heat-load and heat+RH/AQI. Shift window is the coolest daylight 4 h from Open-Meteo heat + GHI — not grid carbon. Cooling plan attributes literature ΔT (canopy + labeled roof/pavement) on Open-Meteo air, then FortyGuard mean after Score. Walk exposure routes OSM indoor space from the box center, then samples TCM after Score. District score is a 0–100 HeatCast index from mean air, exceedance, and unrelieved streak (optional SVI) — not insurance.
               </dd>
             </div>
           </dl>
@@ -120,6 +120,7 @@ export default function MethodPage() {
             <li>A new heatmap generated from trees or land-surface temperature cooling.</li>
             <li>An animated ΔT movie. Range ΔT is two TCM snapshots at the scored Hour (To − From); Play does not recompute it.</li>
             <li>Coverage outside the United States.</li>
+            <li>Grid carbon intensity, gCO2/kWh, insurance scores, or invented CO2 / methane.</li>
           </ul>
         </section>
       </main>

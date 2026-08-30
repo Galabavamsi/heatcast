@@ -296,6 +296,92 @@ export type CompoundHours = {
   aqi_note?: string | null;
 };
 
+export type SiteHourRow = {
+  hour: string;
+  air_c: number | null;
+  apparent_c: number | null;
+  rh_pct: number | null;
+  heat_load: number;
+  ghi_wm2: number | null;
+  above_threshold: boolean;
+};
+
+export type SiteHours = {
+  kind: string;
+  metric?: string;
+  not_used?: string;
+  threshold_c: number;
+  hours: SiteHourRow[];
+  mean_air_c: number | null;
+  mean_apparent_c: number | null;
+  hours_above: number;
+  heat_load_sum: number;
+  coolest: { hour: string; air_c: number | null } | null;
+  hottest: { hour: string; air_c: number | null } | null;
+  label?: string;
+};
+
+export type ShiftWindowBlock = {
+  start: string;
+  end: string;
+  hours: string[];
+  mean_heat_load: number;
+  mean_temp_c: number | null;
+  mean_ghi_wm2: number | null;
+  daylight: boolean;
+};
+
+export type ShiftWindow = {
+  kind: string;
+  metric?: string;
+  not_used?: string;
+  threshold_c: number;
+  window_h: number;
+  hours: Array<{
+    hour: string;
+    temp_c: number | null;
+    heat_load: number;
+    ghi_wm2: number | null;
+    above_threshold: boolean;
+    daylight?: boolean;
+  }>;
+  recommend: ShiftWindowBlock | null;
+  avoid: ShiftWindowBlock | null;
+  coolest_daylight: Array<{
+    hour: string;
+    temp_c: number | null;
+    heat_load: number;
+    ghi_wm2: number | null;
+  }>;
+  label?: string;
+  note?: string;
+};
+
+export type DistrictIndex = {
+  ok: boolean;
+  kind: string;
+  not_used?: string;
+  index: number | null;
+  band: "modest" | "elevated" | "high" | "extreme" | null;
+  components: {
+    intensity: number | null;
+    exceedance: number | null;
+    unrelieved: number | null;
+    svi?: number | null;
+  };
+  weights: Record<string, number>;
+  source: string;
+  label?: string;
+  formula?: string;
+  note?: string;
+  mean_c?: number | null;
+  threshold_c?: number;
+  mean_hours_above?: number | null;
+  unrelieved_ratio?: number | null;
+  mean_svi?: number | null;
+  missing?: string;
+};
+
 export type HoursResponse = {
   lat: number;
   lon: number;
@@ -307,6 +393,9 @@ export type HoursResponse = {
   aqi: AqiSeries | null;
   peak: PeakHours;
   compound: CompoundHours;
+  site_hours?: SiteHours;
+  shift_window?: ShiftWindow;
+  district_preview?: DistrictIndex;
   comfort?: ComfortContext | null;
 };
 

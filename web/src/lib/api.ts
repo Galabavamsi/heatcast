@@ -4,6 +4,7 @@ import type {
   City,
   CoolingResponse,
   EnrichResponse,
+  DistrictIndex,
   HoursResponse,
   SviResponse,
   WalkExposure,
@@ -212,6 +213,24 @@ export async function postWalkExposure(payload: {
     signal: AbortSignal.timeout(15_000),
   });
   return parse<WalkExposure>(res);
+}
+
+export async function postDistrictIndex(payload: {
+  mean_c?: number | null;
+  threshold_c: number;
+  mean_hours_above?: number | null;
+  mean_streak_hours?: number | null;
+  unrelieved_ratio?: number | null;
+  mean_svi?: number | null;
+  source?: string;
+}) {
+  const res = await fetch(`${API_URL}/v1/tools/district-index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000),
+  });
+  return parse<DistrictIndex>(res);
 }
 
 export async function fetchSvi(payload: {

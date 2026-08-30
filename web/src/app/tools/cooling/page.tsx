@@ -4,27 +4,31 @@ import { useMemo, useState } from "react";
 import { BackToHub, BarRow, Kpi, RunRow, SourcePills, ToolIntro } from "@/components/tools/ToolBits";
 import { useTools } from "@/components/tools/ToolsProvider";
 import { satelliteMixSlices } from "@/lib/landcover";
+import { omAirAt, omHoursAbove } from "@/lib/tools/hours";
 import { estimateCoolingPlan } from "@/lib/tools/cooling";
 
 export default function CoolingPlanPage() {
-  const { analysis, enrichment, threshold, shareQ, runScore, runHours, scoreBusy, hoursBusy, hours, error } =
+  const { analysis, enrichment, threshold, shareQ, runScore, runHours, scoreBusy, hoursBusy, hours, error, time } =
     useTools();
   const [canopy, setCanopy] = useState(10);
   const [roof, setRoof] = useState(0);
   const [pave, setPave] = useState(0);
   const currentCanopy = enrichment?.satellite?.buckets?.canopy_pct ?? null;
+  const baselineC = analysis?.scorecard.mean_c ?? omAirAt(hours, time);
+  const baselineHours = analysis?.scorecard.mean_hours_above ?? omHoursAbove(hours);
+  const baselineSource = analysis ? "FortyGuard TCM mean" : "Open-Meteo air at selected hour";
   const plan = useMemo(() => {
-    if (!analysis) return null;
+    if (baselineC == null) return null;
     return estimateCoolingPlan({
       canopyDeltaPct: canopy,
       roofDeltaPct: roof,
       pavementDeltaPct: pave,
       currentCanopyPct: currentCanopy,
-      meanC: analysis.scorecard.mean_c,
-      meanHours: analysis.scorecard.mean_hours_above,
-      thresholdC: analysis.scorecard.threshold_c || threshold,
+      meanC: baselineC,
+      meanHours: baselineHours,
+      thresholdC: analysis?.scorecard.threshold_c || threshold,
     });
-  }, [analysis, canopy, currentCanopy, pave, roof, threshold]);
+  }, [analysis?.scorecard.threshold_c, baselineC, baselineHours, canopy, currentCanopy, pave, roof, threshold]);
   const mix = satelliteMixSlices(
     enrichment?.satellite?.buckets,
     enrichment?.satellite?.classes_percent,
@@ -36,10 +40,12 @@ export default function CoolingPlanPage() {
       <BackToHub query={shareQ} />
       <ToolIntro
         title="Cooling plan"
-        lede="Literature air-temperature overlay on the neighborhood you already scored. Tree canopy uses HeatCast’s published air CE. Cool roofs and pavement are smaller district-scale estimates — not a FortyGuard re-run."
+        lede="Literature air-temperature overlay. Sliders work on Open-Meteo air at the selected hour immediately; Score swaps the baseline to the FortyGuard neighborhood mean. Tree canopy uses HeatCast’s published air CE. Cool roofs and pavement are smaller district-scale estimates — not a FortyGuard re-run."
       >
         <div className="mt-3">
-          <SourcePills items={["FortyGuard 2 m air (mean)", "Literature overlay", "Satellite mix if enrich lands"]} />
+          <SourcePills
+            items={[baselineSource, "Literature overlay", analysis ? "Satellite mix if enrich lands" : "Score tiles for FG mean"]}
+          />
         </div>
       </ToolIntro>
       <RunRow
@@ -52,17 +58,17 @@ export default function CoolingPlanPage() {
       />
       {error ? <p className="mt-3 text-sm text-amber-200">{error}</p> : null}
 
-      {!analysis ? (
+      {baselineC == null ? (
         <p className="mt-6 text-sm text-slate-400">
-          Score the neighborhood first so the sliders sit on a real FortyGuard mean — not an invented baseline.
+          {hoursBusy ? "Loading Open-Meteo air…" : "Need hourly context or a Score so sliders sit on a real baseline."}
         </p>
       ) : (
         <>
           <div className="mt-6 grid gap-3 sm:grid-cols-4">
             <Kpi
               label="Baseline mean"
-              value={analysis.scorecard.mean_c != null ? `${analysis.scorecard.mean_c.toFixed(1)} °C` : "—"}
-              note="FortyGuard TCM mean"
+              value={`${baselineC.toFixed(1)} °C`}
+              note={baselineSource}
             />
             <Kpi
               label="Projected ΔT"

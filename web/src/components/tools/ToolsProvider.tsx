@@ -48,7 +48,7 @@ import type {
 
 const HOURS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
 
-export type ToolId = "cooling" | "walk" | "peak" | "compound";
+export type ToolId = "cooling" | "walk" | "peak" | "compound" | "hours" | "shift" | "district";
 
 type ToolsState = {
   bbox: BBox;
@@ -61,11 +61,14 @@ type ToolsState = {
   analysis: AnalyzeResponse | null;
   enrichment: EnrichResponse | null;
   cooling: CoolingResponse | null;
+  sites: CoolingSite[];
   walkDest: CoolingSite | null;
   walkRoute: WalkRoute | null;
   walkExposure: WalkExposure | null;
+  walkFrom: "center" | "hotspot" | null;
   hoursBusy: boolean;
   scoreBusy: boolean;
+  placesBusy: boolean;
   ready: boolean;
   error: string | null;
   shareQ: string;
@@ -75,6 +78,7 @@ type ToolsState = {
   applyPreset: (id: string) => void;
   applyPlace: (hit: PlaceHit) => void;
   runHours: () => Promise<void>;
+  runPlaces: () => Promise<void>;
   runScore: () => Promise<void>;
 };
 
@@ -109,11 +113,14 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
   const [walkExposure, setWalkExposure] = useState<WalkExposure | null>(null);
   const [hoursBusy, setHoursBusy] = useState(false);
   const [scoreBusy, setScoreBusy] = useState(false);
+  const [placesBusy, setPlacesBusy] = useState(false);
+  const [walkFrom, setWalkFrom] = useState<"center" | "hotspot" | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const skipGeocode = useRef(false);
   const hoursKey = useRef<string | null>(null);
   const scoreKey = useRef<string | null>(null);
+  const placesKey = useRef<string | null>(null);
 
   const threshold = thresholdForBox(bbox);
   const shareQ = shareQuery(bbox, date, time);
@@ -152,8 +159,10 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
     setWalkDest(null);
     setWalkRoute(null);
     setWalkExposure(null);
+    setWalkFrom(null);
     hoursKey.current = null;
     scoreKey.current = null;
+    placesKey.current = null;
     setError(null);
   }, []);
 
@@ -230,6 +239,44 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
     }
   }, [bbox, date, hours, threshold, time]);
 
+  const runPlaces = useCallback(async () => {
+    const key = bbox.join(",");
+    if (placesKey.current === key && cooling) return;
+    setPlacesBusy(true);
+    try {
+      const cool = await getCooling(bbox);
+      placesKey.current = key;
+      setCooling(cool);
+      if (scoreKey.current) return;
+      const sites = coolingSitesFrom(cool);
+      const dest = nearestIndoor(bboxCenter(bbox), sites);
+      setWalkDest(dest);
+      if (dest) {
+        const c = bboxCenter(bbox);
+        const route = await getWalk(c.lon, c.lat, dest.lon, dest.lat);
+        setWalkRoute(route.ok ? route : null);
+        setWalkFrom(route.ok ? "center" : null);
+      } else {
+        setWalkRoute(null);
+        setWalkFrom(null);
+      }
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : "Indoor sites failed";
+      setError(
+        /timeout|aborted|signal/i.test(raw)
+          ? "OpenStreetMap indoor sites timed out. Retry from this page or Score tiles."
+          : raw,
+      );
+    } finally {
+      setPlacesBusy(false);
+    }
+  }, [bbox, cooling]);
+
+  useEffect(() => {
+    if (!ready) return;
+    void runHours();
+  }, [ready, runHours]);
+
   const runScore = useCallback(async () => {
     if (!areaOk) {
       setError(`Draw or pick a US box between ${MIN_AREA_MI2} and ${MAX_AREA_MI2} mi².`);
@@ -266,6 +313,7 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
         const route = await getWalk(scored.hotspot.lon, scored.hotspot.lat, dest.lon, dest.lat);
         const okRoute = route.ok ? route : null;
         setWalkRoute(okRoute);
+        setWalkFrom(okRoute ? "hotspot" : null);
         if (okRoute?.coordinates?.length && scored.heatmap) {
           const exposure = await postWalkExposure({
             coordinates: okRoute.coordinates as [number, number][],
@@ -279,6 +327,7 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
       } else {
         setWalkRoute(null);
         setWalkExposure(null);
+        setWalkFrom(null);
       }
       if (scored.hotspot) {
         enrichHotspot({
@@ -296,6 +345,8 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
     }
   }, [analysis, areaOk, bbox, date, hours, placeName, runHours, threshold, time]);
 
+  const sites = useMemo(() => (cooling ? coolingSitesFrom(cooling) : []), [cooling]);
+
   const value = useMemo<ToolsState>(
     () => ({
       bbox,
@@ -308,11 +359,14 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
       analysis,
       enrichment,
       cooling,
+      sites,
       walkDest,
       walkRoute,
       walkExposure,
+      walkFrom,
       hoursBusy,
       scoreBusy,
+      placesBusy,
       ready,
       error,
       shareQ,
@@ -328,6 +382,7 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
       applyPreset,
       applyPlace,
       runHours,
+      runPlaces,
       runScore,
     }),
     [
@@ -343,17 +398,21 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
       hours,
       hoursBusy,
       placeName,
+      placesBusy,
       ready,
       runHours,
+      runPlaces,
       runScore,
       scoreBusy,
       scoreHref,
       search,
       shareQ,
+      sites,
       threshold,
       time,
       walkDest,
       walkExposure,
+      walkFrom,
       walkRoute,
     ],
   );

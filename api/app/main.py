@@ -62,7 +62,13 @@ from .svi import SviError, svi_for_bbox  # noqa: E402  # CDC SVI 2022 overlay
 from .unrelieved import unrelieved_scorecard  # noqa: E402
 from .air_quality import fetch_us_aqi  # noqa: E402
 from .cooling_plan import estimate_cooling_plan  # noqa: E402
-from .hours_infer import infer_compound_hours, infer_peak_hours  # noqa: E402
+from .district_index import district_heatcast_index  # noqa: E402
+from .hours_infer import (  # noqa: E402
+    infer_compound_hours,
+    infer_peak_hours,
+    infer_shift_window,
+    infer_site_hours,
+)
 from .walk_exposure import sample_walk_exposure  # noqa: E402
 from .weather import fetch_elevation_m, fetch_precip, public_hourly  # noqa: E402
 
@@ -153,6 +159,16 @@ class WalkExposureRequest(BaseModel):
     coordinates: list[list[float]]
     heatmap: dict[str, Any] | None = None
     threshold_c: float = 35.0
+
+
+class DistrictIndexRequest(BaseModel):
+    mean_c: float | None = None
+    threshold_c: float = 35.0
+    mean_hours_above: float | None = None
+    mean_streak_hours: float | None = None
+    unrelieved_ratio: float | None = None
+    mean_svi: float | None = None
+    source: str = "open-meteo"
 
 
 class BriefRequest(BaseModel):
@@ -479,18 +495,41 @@ def tools_hours(
     rain = fetch_precip(lat, lon, date, hour=time, timezone=tz)
     hourly = public_hourly(rain) or {}
     aqi = fetch_us_aqi(lat, lon, date, timezone=tz)
+    times = hourly.get("times") or []
+    temps = hourly.get("temp_c") or []
     peak = infer_peak_hours(
-        times=hourly.get("times") or [],
-        temps=hourly.get("temp_c") or [],
+        times=times,
+        temps=temps,
         ghi=hourly.get("ghi_wm2") or [],
         threshold_c=threshold_c,
     )
     compound = infer_compound_hours(
-        times=hourly.get("times") or [],
-        temps=hourly.get("temp_c") or [],
+        times=times,
+        temps=temps,
         rh=hourly.get("rh_pct") or [],
         us_aqi=aqi.get("us_aqi") or [],
         threshold_c=threshold_c,
+    )
+    site = infer_site_hours(
+        times=times,
+        temps=temps,
+        apparent=hourly.get("apparent_c") or [],
+        rh=hourly.get("rh_pct") or [],
+        ghi=hourly.get("ghi_wm2") or [],
+        threshold_c=threshold_c,
+    )
+    shift = infer_shift_window(
+        times=times,
+        temps=temps,
+        ghi=hourly.get("ghi_wm2") or [],
+        threshold_c=threshold_c,
+    )
+    preview_index = district_heatcast_index(
+        mean_c=site.get("mean_air_c"),
+        threshold_c=threshold_c,
+        mean_hours_above=float(peak.get("hours_above") or 0),
+        mean_streak_hours=float(peak.get("unrelieved_streak_h") or 0),
+        source="open-meteo",
     )
     return {
         "lat": lat,
@@ -509,8 +548,25 @@ def tools_hours(
         },
         "peak": peak,
         "compound": compound,
+        "site_hours": site,
+        "shift_window": shift,
+        "district_preview": preview_index,
         "comfort": rain.get("comfort") if rain else None,
     }
+
+
+@app.post("/v1/tools/district-index")
+def tools_district_index(body: DistrictIndexRequest) -> dict[str, object]:
+    """0–100 HeatCast index from scorecard fields. Not insurance."""
+    return district_heatcast_index(
+        mean_c=body.mean_c,
+        threshold_c=body.threshold_c,
+        mean_hours_above=body.mean_hours_above,
+        mean_streak_hours=body.mean_streak_hours,
+        unrelieved_ratio=body.unrelieved_ratio,
+        mean_svi=body.mean_svi,
+        source=body.source,
+    )
 
 
 def _resolve_aoi(body: AnalyzeRequest) -> tuple[dict[str, Any], str, str | None]:

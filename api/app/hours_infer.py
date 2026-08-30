@@ -178,3 +178,191 @@ def infer_compound_hours(
         if has_aqi
         else "US AQI unavailable for this point. Showing heat + humidity hours only.",
     }
+
+
+def infer_site_hours(
+    *,
+    times: list[Any],
+    temps: list[Any],
+    apparent: list[Any] | None = None,
+    rh: list[Any] | None = None,
+    ghi: list[Any] | None = None,
+    threshold_c: float = 35.0,
+) -> dict[str, Any]:
+    """Hour-by-hour Open-Meteo table. Not a data-center PUE and not tile TCM."""
+    apparent = apparent or []
+    rh = rh or []
+    ghi = ghi or []
+    rows: list[dict[str, Any]] = []
+    n = max(len(times), len(temps))
+    airs: list[float] = []
+    apps: list[float] = []
+    loads: list[float] = []
+    for i in range(n):
+        clock = _clock(times[i]) if i < len(times) else f"{i:02d}:00"
+        temp = _num(temps[i]) if i < len(temps) else None
+        app = _num(apparent[i]) if i < len(apparent) else None
+        humid = _num(rh[i]) if i < len(rh) else None
+        rad = _num(ghi[i]) if i < len(ghi) else None
+        load = heat_load_index(temp, threshold_c)
+        if temp is not None:
+            airs.append(temp)
+        if app is not None:
+            apps.append(app)
+        loads.append(load)
+        rows.append(
+            {
+                "hour": clock,
+                "air_c": None if temp is None else round(temp, 2),
+                "apparent_c": None if app is None else round(app, 2),
+                "rh_pct": None if humid is None else round(humid, 1),
+                "heat_load": load,
+                "ghi_wm2": None if rad is None else round(rad, 1),
+                "above_threshold": bool(temp is not None and temp >= threshold_c),
+            }
+        )
+    coolest = min((r for r in rows if r["air_c"] is not None), key=lambda r: r["air_c"], default=None)
+    hottest = max((r for r in rows if r["air_c"] is not None), key=lambda r: r["air_c"], default=None)
+    return {
+        "kind": "site_hour_table",
+        "metric": "open_meteo_hourly_air",
+        "not_used": "data_center_pue_tile_diurnal_tcm",
+        "threshold_c": threshold_c,
+        "hours": rows,
+        "mean_air_c": None if not airs else round(sum(airs) / len(airs), 2),
+        "mean_apparent_c": None if not apps else round(sum(apps) / len(apps), 2),
+        "hours_above": sum(1 for r in rows if r["above_threshold"]),
+        "heat_load_sum": round(sum(loads), 2),
+        "coolest": None
+        if coolest is None
+        else {"hour": coolest["hour"], "air_c": coolest["air_c"]},
+        "hottest": None
+        if hottest is None
+        else {"hour": hottest["hour"], "air_c": hottest["air_c"]},
+        "label": (
+            "Hour-by-hour Open-Meteo 2 m air, apparent temperature, humidity, "
+            "and a cooling-demand proxy (degree-hours above threshold). "
+            "Not data-center PUE and not a cached diurnal FortyGuard TCM."
+        ),
+    }
+
+
+WINDOW_H = 4
+GHI_DAYLIGHT = 20.0
+
+
+def _row_hour(clock: str) -> int | None:
+    try:
+        return int(str(clock).split(":")[0])
+    except (TypeError, ValueError):
+        return None
+
+
+def _daylight_flags(rows: list[dict[str, Any]]) -> list[bool]:
+    has_ghi = any(r.get("ghi_wm2") is not None for r in rows)
+    flags: list[bool] = []
+    for row in rows:
+        if has_ghi:
+            ghi = row.get("ghi_wm2")
+            flags.append(bool(ghi is not None and ghi >= GHI_DAYLIGHT))
+        else:
+            hour = _row_hour(str(row.get("hour") or ""))
+            flags.append(hour is not None and 7 <= hour <= 18)
+    if any(flags):
+        return flags
+    return [True] * len(rows)
+
+
+def infer_shift_window(
+    *,
+    times: list[Any],
+    temps: list[Any],
+    ghi: list[Any] | None = None,
+    threshold_c: float = 35.0,
+    window_h: int = WINDOW_H,
+) -> dict[str, Any]:
+    """Best cool / low-demand daylight hours. Not grid carbon / gCO2/kWh."""
+    ghi = ghi or []
+    rows: list[dict[str, Any]] = []
+    n = max(len(times), len(temps))
+    for i in range(n):
+        clock = _clock(times[i]) if i < len(times) else f"{i:02d}:00"
+        temp = _num(temps[i]) if i < len(temps) else None
+        rad = _num(ghi[i]) if i < len(ghi) else None
+        rows.append(
+            {
+                "hour": clock,
+                "temp_c": None if temp is None else round(temp, 2),
+                "heat_load": heat_load_index(temp, threshold_c),
+                "ghi_wm2": None if rad is None else round(rad, 1),
+                "above_threshold": bool(temp is not None and temp >= threshold_c),
+            }
+        )
+    daylight = _daylight_flags(rows)
+    for row, flag in zip(rows, daylight):
+        row["daylight"] = flag
+    length = max(1, min(int(window_h or WINDOW_H), len(rows) or 1))
+
+    def _window_stats(start: int) -> dict[str, Any] | None:
+        chunk = rows[start : start + length]
+        if len(chunk) < length:
+            return None
+        loads = [c["heat_load"] for c in chunk]
+        ghis = [c["ghi_wm2"] for c in chunk if c.get("ghi_wm2") is not None]
+        temps_c = [c["temp_c"] for c in chunk if c.get("temp_c") is not None]
+        return {
+            "start": chunk[0]["hour"],
+            "end": chunk[-1]["hour"],
+            "hours": [c["hour"] for c in chunk],
+            "mean_heat_load": round(sum(loads) / len(loads), 2),
+            "mean_temp_c": None if not temps_c else round(sum(temps_c) / len(temps_c), 2),
+            "mean_ghi_wm2": None if not ghis else round(sum(ghis) / len(ghis), 1),
+            "daylight": all(c["daylight"] for c in chunk),
+        }
+
+    recommend: dict[str, Any] | None = None
+    avoid: dict[str, Any] | None = None
+
+    def _rank(stats: dict[str, Any]) -> tuple[float, float]:
+        load = float(stats["mean_heat_load"])
+        temp = stats["mean_temp_c"]
+        return (load, 99.0 if temp is None else float(temp))
+
+    for i in range(0, max(0, len(rows) - length + 1)):
+        stats = _window_stats(i)
+        if stats is None:
+            continue
+        if stats["daylight"]:
+            if recommend is None or _rank(stats) < _rank(recommend):
+                recommend = stats
+        if avoid is None or _rank(stats) > _rank(avoid):
+            avoid = stats
+    if recommend is None:
+        recommend = _window_stats(0)
+    coolest_daylight = sorted(
+        (r for r in rows if r["daylight"] and r["temp_c"] is not None),
+        key=lambda r: (r["heat_load"], r["temp_c"]),
+    )[:length]
+    return {
+        "kind": "shift_window",
+        "metric": "open_meteo_heat_and_ghi",
+        "not_used": "grid_carbon_gco2_electricity_maps_eia",
+        "threshold_c": threshold_c,
+        "window_h": length,
+        "hours": rows,
+        "recommend": recommend,
+        "avoid": avoid,
+        "coolest_daylight": [
+            {"hour": r["hour"], "temp_c": r["temp_c"], "heat_load": r["heat_load"], "ghi_wm2": r["ghi_wm2"]}
+            for r in coolest_daylight
+        ],
+        "label": (
+            "Best cool / low-demand daylight hours from Open-Meteo 2 m air and GHI. "
+            "A HeatCast shift window — not grid carbon intensity and not gCO2/kWh."
+        ),
+        "note": (
+            f"Recommend the {length} h daylight block with the lowest mean heat-load, "
+            "then the lowest mean air. GHI only marks daylight (not carbon). "
+            "The avoid block is the hottest 4 h stretch."
+        ),
+    }

@@ -84,8 +84,8 @@ HeatCast is a small site plus the map:
 |---|---|
 | `/` | Product landing (duration / indoor walk / planting beats + **Score a neighborhood** / **Open tools**) |
 | `/app` | Map + scorecard (the product). Overlay tabs stay **Range \| Day \| Place \| Brief**. |
-| `/tools` | Separate inferred-tools hub (cooling plan, walk exposure, peak hours, compound hours) |
-| `/tools/cooling` `/tools/walk` `/tools/peak` `/tools/compound` | Drill-in views. Same bbox/date/time query params as `/app`. |
+| `/tools` | Separate inferred-tools hub (seven working tools) |
+| `/tools/hours` `/peak` `/compound` `/shift` `/cooling` `/walk` `/district` | Drill-in views. Same bbox/date/time query params as `/app`. |
 | `/method` | Honest layer notes (what it is / is not) |
 
 Nav: **Home · Score · Tools · Method**. After Score, **Export** (header, next to **Scorecard**) downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief `.txt`, and (if present) hours/TCM tiles. A share URL restores the box, date, optional end date, and hour — it does **not** auto-score. **Tools** is a first-class route, not a scorecard tab.
@@ -216,7 +216,7 @@ One right drawer (~21 rem) overlays the map. Header stays full width (`inset-x-4
 - Range ΔT is two TCM snapshots at one clock hour. ΔT edges are noisy 100 m gradients, not a heat flux. Play does not animate N deltas.
 
 Do **not** expand into India, UTCI, NWS HeatRisk, deck.gl, bus-stop clones, a citywide cool-route app, or a second product.
-- `/tools` inferences stay labeled: cooling-plan roof/pavement are literature air estimates; peak hours are a neighborhood heat-load proxy (not MW / EIA / duck curve); compound hours use Open-Meteo humidity / US AQI, never invented CO2 or methane.
+- `/tools` inferences stay labeled: cooling-plan roof/pavement are literature air estimates; peak hours are a neighborhood heat-load proxy (not MW / EIA / duck curve); compound hours use Open-Meteo humidity / US AQI; site hours are an Open-Meteo table (not PUE); shift window is heat + GHI (not gCO2/kWh); district score is a HeatCast 0–100 index (not insurance). Never invented CO2 or methane.
 
 ---
 
@@ -226,13 +226,15 @@ A small HeatCast suite on the **same US box and demo date**. Inspired by webinar
 
 | Tool | Infers from | Does not claim |
 |---|---|---|
-| **Cooling plan** | Scored TCM mean + existing canopy air CE (~0.015 °C / 1%). Optional cool-roof (~0.008 °C / 1%) and pavement (~0.005 °C / 1%) literature levers. Attribution bars. Satellite mix at the hotspot if enrich already returned buckets. | A new FortyGuard heatmap. Invented 52.7% building shares. LST CE. |
-| **Walk exposure** | Existing OSRM walk (hotspot → indoor OSM site) sampled on nearest TCM tiles. Distance, duration, hottest stretch. | Cargo, vaccines, WBGT, OSHA, multi-stop logistics. |
+| **Site hours** | Open-Meteo hourly air, apparent, RH, GHI, and a cooling-demand proxy (degree-hours above threshold). After Score: FG mean at the selected hour. | Data-center PUE. A cached diurnal FortyGuard TCM. |
 | **Peak hours** | Open-Meteo hourly 2 m air → degree-hours above threshold + unrelieved streak. Optional GHI panel (Open-Meteo). After Score: FG mean hours / streak / unrelieved ratio. | Transformer MW, duck curve, EIA. |
 | **Compound hours** | Open-Meteo heat + RH; US AQI when the free series lands. | FortyGuard env AQI (this enrich path does not request it). CO2 / methane. |
-| **Coming later** | Cards only: site hour table, carbon-aware window, insurance score. | Dummy numbers. |
+| **Shift window** | Coolest 4 h daylight block from Open-Meteo heat-load + GHI. Hottest block to avoid. | Grid carbon, gCO2/kWh, Electricity Maps, EIA. |
+| **Cooling plan** | Open-Meteo air at the selected hour immediately; scored TCM mean after Score. Canopy air CE (~0.015 °C / 1%). Optional cool-roof (~0.008 °C / 1%) and pavement (~0.005 °C / 1%) literature levers. Attribution bars. Satellite mix at the hotspot if enrich already returned buckets. | A new FortyGuard heatmap. Invented 52.7% building shares. LST CE. |
+| **Walk exposure** | OSM indoor sites + OSRM from the box center immediately. After Score: hotspot origin + nearest TCM samples. | Cargo, vaccines, WBGT, OSHA, multi-stop logistics, official cooling-center scrape. |
+| **District score** | 0–100 HeatCast index: intensity (mean vs threshold), exceedance hours, unrelieved streak. Open-Meteo preview first; FG after Score; optional CDC SVI overlay. | Insurance, FICO of heat, parametric payout. |
 
-Share params (`west`, `south`, `east`, `north`, `date`, `time`) match `/app`. Tools does **not** auto-score tiles (saves credits). Peak / compound auto-load the free Open-Meteo hourly series after the URL hydrates. Default preset is Houston EaDo; Houston threshold 35 °C, Phoenix 38 °C. Demo date **2024-07-15 15:00**.
+Share params (`west`, `south`, `east`, `north`, `date`, `time`) match `/app`. Tools does **not** auto-score tiles (saves credits). All tools auto-load the free Open-Meteo hourly series after the URL hydrates. Walk also loads OSM indoor sites. Default preset is Houston EaDo; Houston threshold 35 °C, Phoenix 38 °C. Demo date **2024-07-15 15:00**.
 
 ---
 
@@ -257,7 +259,7 @@ flowchart LR
     E["POST /v1/enrich\nsatellite + env first"]
     O["GET cooling / buildings"]
     W["GET /v1/walk\nOSRM"]
-    T["GET /v1/tools/hours\nPOST cooling + walk-exposure"]
+    T["GET /v1/tools/hours\nPOST cooling + walk + district"]
     B["POST /v1/brief\nDeepSeek after layers"]
   end
   FG[FortyGuard Premium]
@@ -343,9 +345,10 @@ Demo presets in `api/app/cities.py`: Houston EaDo, Houston Museum District, Phoe
 | GET | `/v1/cooling` | OSM indoor public sites |
 | GET | `/v1/osm` | Both OSM layers |
 | GET | `/v1/weather` | Open-Meteo rain / heat index / hourly + GHI + optional US AQI + FEMA chip + USGS elevation |
-| GET | `/v1/tools/hours` | Open-Meteo peak + compound inferences (no FortyGuard call) |
+| GET | `/v1/tools/hours` | Open-Meteo peak, compound, site-hours, shift window, district preview (no FortyGuard call) |
 | POST | `/v1/tools/cooling` | Literature cooling-plan attribution (no FortyGuard call) |
 | POST | `/v1/tools/walk-exposure` | Nearest TCM tile along an OSRM polyline |
+| POST | `/v1/tools/district-index` | 0–100 HeatCast index from scorecard fields (not insurance) |
 | POST | `/v1/scenario` | Literature ΔT without re-running FortyGuard |
 | GET | `/v1/credits` | Key usage, secrets stripped |
 | GET | `/v1/outputs/{file}` | Heat-intelligence PDF |
