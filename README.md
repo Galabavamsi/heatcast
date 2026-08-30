@@ -237,7 +237,7 @@ FortyGuard products used server-side: `tcm`, `exceedance`, `persistence`, `envir
 
 | Surface | Host | Live URL |
 |---|---|---|
-| Web | Vercel (project Root Directory `web`; repo `vercel.json` also copies `web/.next` if the root is the monorepo) | https://web-pearl-ten-99.vercel.app |
+| Web | Vercel (GitHub project Root Directory is `web`) | https://web-pearl-ten-99.vercel.app |
 | Score | same | https://web-pearl-ten-99.vercel.app/app |
 | Tools | same | https://web-pearl-ten-99.vercel.app/tools |
 | Method | same | https://web-pearl-ten-99.vercel.app/method |
