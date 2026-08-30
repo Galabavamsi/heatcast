@@ -304,14 +304,25 @@ function rampColor(t: number, ramp: typeof RAMP = RAMP): [number, number, number
   ];
 }
 
+/** Public Carto basemap key only. Unkeyed cartocdn tiles 200 with a full-map watermark. */
+const CARTO_API_KEY = (process.env.NEXT_PUBLIC_CARTO_API_KEY ?? "").trim();
+
+const ESRI_DARK_TILES = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+];
+
+function cartoDarkTiles(apiKey: string): string[] {
+  const q = `?api_key=${encodeURIComponent(apiKey)}`;
+  return [
+    `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${q}`,
+    `https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${q}`,
+    `https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${q}`,
+  ];
+}
+
 function rasterStyle(useEsri: boolean): StyleSpecification {
-  const tiles = useEsri
-    ? ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"]
-    : [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-      ];
+  const useCarto = Boolean(CARTO_API_KEY) && !useEsri;
+  const tiles = useCarto ? cartoDarkTiles(CARTO_API_KEY) : ESRI_DARK_TILES;
   return {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
@@ -320,7 +331,7 @@ function rasterStyle(useEsri: boolean): StyleSpecification {
         type: "raster",
         tiles,
         tileSize: 256,
-        attribution: useEsri ? "Tiles © Esri" : "© OpenStreetMap © CARTO",
+        attribution: useCarto ? "© OpenStreetMap © CARTO" : "Tiles © Esri",
       },
     },
     layers: [
@@ -1234,7 +1245,7 @@ export default function HeatMap({
   const rasterCacheRef = useRef<RasterCache | null>(null);
   const loggedRasterKey = useRef("");
   const fittedKey = useRef("");
-  const [useEsri, setUseEsri] = useState(false);
+  const [useEsri, setUseEsri] = useState(!CARTO_API_KEY);
   const [styleReady, setStyleReady] = useState(0);
   const [heatMode, setHeatMode] = useState<HeatMode>("temp");
   const [gpuReset, setGpuReset] = useState(false);
