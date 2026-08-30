@@ -1,6 +1,11 @@
-This Next.js app is the HeatCast frontend.
+# HeatCast web
 
-Run from `web/` with `npm run dev` (port 3000). The FastAPI backend must be on port 8000.
+Next.js 16 frontend for [HeatCast](https://github.com/Galabavamsi/heatcast). The FastAPI service must be reachable at `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`).
 
-**Start here:** [../README.md](../README.md)  
-**Team living notes:** [../HANDOVER.md](../HANDOVER.md)
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Product documentation lives in the [repository README](../README.md).

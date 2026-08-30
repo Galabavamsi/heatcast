@@ -1,294 +1,168 @@
 # HeatCast
 
-Neighborhood heat scorecard for **FortyGuard Hackathon’26**.
+HeatCast is a neighborhood heat scorecard for United States planners. Draw an area of interest, choose a historic summer **Day** or a **Range** (at most seven days) and an hour, then score ~100 m **Thermal Comfort Map** tiles — FortyGuard two-metre air, hours above a local threshold, and the longest consecutive streak. The map then layers CDC/ATSDR **Social Vulnerability Index** tracts, OpenStreetMap indoor public sites, an Open Source Routing Machine walk from the hotspot, and a literature planting overlay. A separate **Tools** workspace infers site hours, peak load, compound heat, shift windows, cooling levers, walk exposure, and a 0–100 HeatCast district index from the same box — without treating FortyGuard as the name on every chip.
 
-Draw a US neighborhood, pick **Day** or a **Range** (max 7 days) and an hour, **Score area**. You get FortyGuard ~100 m **2 m air** tiles (temperature + hours above threshold + longest streak), an **unrelieved-heat ratio**, CDC social-vulnerability tracts, OSM shade and indoor public sites, an OSRM walk from the hotspot to a library or community centre, and a planner brief that names what to do next.
+[Live demo](https://web-pearl-ten-99.vercel.app) · [Score](https://web-pearl-ten-99.vercel.app/app) · [Tools](https://web-pearl-ten-99.vercel.app/tools) · [Method](https://web-pearl-ten-99.vercel.app/method) · [API](https://heatcast-api-production.up.railway.app/health) · [Demo video](https://drive.google.com/drive/folders/1GTT19Evm6FhZMA4eqyBQGxRledEz03Je?usp=drive_link) · [GitHub](https://github.com/Galabavamsi/heatcast)
 
-![Scored East Downtown: FortyGuard heat, SVI tracts, cooling-site pins, and the planner scorecard](docs/images/heatcast-scored.png)
-
-| | |
-|---|---|
-| **Team** | HumanSlop · **FG-141** |
-| **Track** | 1 — urban planning |
-| **Deadline** | 30 Aug 2026 |
-| **Repo** | [github.com/Galabavamsi/heatcast](https://github.com/Galabavamsi/heatcast) |
-| **Local folder** | `D:\fortyguard\heatlens` (UI name HeatCast; folder is still heatlens) |
-
-**Living team notes** (status, changelog, open work): [HANDOVER.md](./HANDOVER.md).
+Site navigation is **Home · Score · Tools · Method**.
 
 ---
 
-## What we are building, and who it is for
+## Screenshots
 
-HeatCast answers one planner question:
+Landing: product pitch and entry points into Score and Tools.
 
-> On this block, on this summer afternoon (or over a few days), **how hot is the air, how long does it stay hot, who is most exposed, how far is indoor public space, and what can we actually do** (trees, cool pavement)?
+![HeatCast landing](docs/screenshots/home.webp)
 
-It is **not** sidewalk CFD, not a citywide cool-commute planner, and not a FortyGuard “add trees and re-simulate” product. FortyGuard measures. HeatCast **scores a district** and layers public context on top. Walk is a thin hotspot → indoor check, not a second product.
+Score: Houston East Downtown on Esri World Imagery with place labels, transportation overlay, and a drawn area of interest. **Score area** is left unclicked here so a README visit does not bill FortyGuard credits.
 
-```mermaid
-flowchart LR
-  FG["FortyGuard measures<br/>~100 m 2 m air"] --> HC["HeatCast scores the district"]
-  HC --> P["Planner: where to plant / pave"]
-  HC --> C["Construction: hours ≥ 35 °C"]
-  HC --> H["OEM: indoor public sites in the box"]
-```
+![HeatCast Score map, Houston East Downtown](docs/screenshots/score-map.webp)
 
-| Person | Job they have | What HeatCast gives them |
-|---|---|---|
-| **City planner / sustainability staff** | Where to plant or re-pave first | Hottest tiles × high-SVI tracts + satellite mix (canopy vs pavement) |
-| **Construction / outdoor-work PM** | Can this pad take a July afternoon? | Mean/max **hours ≥ 35 °C** (Houston) and longest streak on the real FortyGuard duration layers |
-| **OEM / public health** | Where are people during a heat event? | OSM libraries and community centres **in the same box**, plus a walk from the hotspot (not an official cooling-center list) |
-| **Hackathon judges** | Is FortyGuard central? | Live TCM + exceedance `activity_id`s on the coverage strip |
+A scored run on the same district: translucent two-metre air raster (`heatcast-raster`), hotspot label, indoor OpenStreetMap pins, and the scorecard overlay (mean/max air, hours above 35 °C, Social Vulnerability Index join, canopy slider).
 
----
+![Scored Houston East Downtown with heat raster and scorecard](docs/screenshots/houston-scored.webp)
 
-## Worked example: Houston East Downtown, 15 Jul 2024, 15:00
+Tools hub: seven inferences on the same United States box and demo date. Cards load Open-Meteo immediately; they do not auto-score tiles.
 
-This is a real Score from the running app (same settings you should demo). The PNG is older chrome; the numbers below are from that Score.
+![HeatCast Tools hub](docs/screenshots/tools.webp)
 
-![Search any US city; pick East Downtown, Houston; date 2024-07-15 15:00](docs/images/heatcast-search.png)
+Cooling plan: literature sliders on Open-Meteo air at the selected hour (FortyGuard mean after Score).
 
-![AOI drawn over East Downtown before Score](docs/images/heatcast-eado-aoi.png)
+![Cooling plan tool](docs/screenshots/tool-cooling.webp)
 
-Area on the map is a **WGS84** rectangle: metres-per-degree of latitude, longitude scaled by **cos(lat)**. Not Web Mercator. The Houston share-URL box (`west=-95.40236&south=29.73387&east=-95.37434&north=29.75282`) is **≈ 2.20 mi²**. A smaller hand-drawn EaDo box from this Score was **1.59 mi²** (417 tiles). Stay under the **45 mi²** cap.
+Site hours: hour-by-hour Open-Meteo air, apparent temperature, relative humidity, and a cooling-demand proxy.
 
-| Signal | Number | What you do with it |
-|---|---|---|
-| FortyGuard mean / max | **35.87 / 37.1 °C** | Peak hour is already above Houston’s 35 °C threshold |
-| Share of tiles ≥ 35 °C | **~78%** | Most of the box is in exceedance at 15:00, not one freak tile |
-| Hours ≥ 35 °C | **mean 5.09 h · max 8.46 h** | Duration story for outdoor work — not just the 37.1 °C pin |
-| Unrelieved-heat ratio | streak ÷ hours (0–1) | Near 1 means those hours arrived as one unbroken run. HeatCast index, not a WBGT table. |
-| Hotspot | **29.7513, −95.3520 · 37.1 °C** | Where to look first on the map; walk starts here |
-| NWS heat index (Open-Meteo) | **37.5 °C · danger · RH 59%** | Comfort context at km scale; labeled separately from FG |
-| Satellite at hotspot | **~10% plant/canopy · ~56% impervious** (roads ~52%) | Cause tag: thin canopy + pavement → EPA cool pavement + USDA i-Tree |
-| SVI | **Census Tract 3123 · 94th percentile · 36.2 °C** | Highest heat×vulnerability in the box — equity priority |
-| Cooling sites (OSM) | **HPL Express (library), Star of Hope** | Indoor public space already in the neighborhood |
-| Walk | Hotspot → nearest library / community centre | OSRM walking line in the Area card; not a citywide cool route |
-| Tree slider | **+10% ≈ −0.15 °C · +20% ≈ −0.30 °C** | Literature overlay **on the existing tiles**, not a new FG heatmap |
-| Shade at 15:00 | **Sun ~68° · ~4 m shadows** | July afternoon sun is high; building shade is short. Don’t oversell umbra. |
+![Site hours tool](docs/screenshots/tool-hours.webp)
 
-Planner brief (same run, after satellite + SVI landed):
+Shift window: coolest four-hour daylight block from Open-Meteo heat load and Global Horizontal Irradiance — not grid carbon.
 
-> East Downtown shows a FortyGuard TCM mean of 35.87°C with 77.9% of tiles above the 35°C threshold, averaging 5.09 hours of exceedance. FortyGuard satellite data indicates only 10.1% canopy cover against 56.01% impervious surfaces… This low-canopy, high-impervious combination supports **EPA Heat Island cool pavement** and **USDA Forest Service i-Tree** planting. CDC/ATSDR SVI 2022 identifies **Census Tract 3123** as the highest-vulnerability area at the 94th percentile…
-
-**Decision that example supports:** do not treat “plant anywhere in EaDo” as the plan. Put trees and cool pavement on the **hottest, most paved tiles**, and treat Tract 3123 as the equity check even if it is not the single hottest third.
-
-Museum District, **same date**, is the greener control tract (preset `houston-museum`). Phoenix downtown uses threshold **38 °C** and **must** use `2024-07-15`, not `2026-08-17`.
+![Shift window tool](docs/screenshots/tool-shift.webp)
 
 ---
 
-HeatCast is a small site plus the map:
+## Features
 
-| Route | What it is |
-|---|---|
-| `/` | Product landing (duration / indoor walk / planting beats + **Score a neighborhood** / **Open tools**) |
-| `/app` | Map + scorecard (the product). Overlay tabs stay **Range \| Day \| Place \| Brief**. |
-| `/tools` | Separate inferred-tools hub (seven working tools) |
-| `/tools/hours` `/peak` `/compound` `/shift` `/cooling` `/walk` `/district` | Drill-in views. Same bbox/date/time query params as `/app`. |
-| `/method` | Honest layer notes (what it is / is not) |
+### Score (`/app`)
 
-Nav: **Home · Score · Tools · Method**. After Score, **Export** (header, next to **Scorecard**) downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief `.txt`, and (if present) hours/TCM tiles. A share URL restores the box, date, optional end date, and hour — it does **not** auto-score. **Tools** is a first-class route, not a scorecard tab.
+- Search any United States city or neighborhood (Nominatim, `countrycodes=us`), or draw a box between **0.04 mi²** and **45 mi²**.
+- **Day** scores one date. **Range** adds **To** (at most seven inclusive days). Two-metre air, shade, and comfort always use **From + Hour**.
+- **Score area** requests FortyGuard Thermal Comfort Map tiles plus exceedance (hours above threshold) and persistence (longest streak).
+- On a Range score, a second Thermal Comfort Map at **To + the same Hour** produces **ΔT (range)** (To − From) and noisy **ΔT edges** (|∇ΔT|). **Play** cycles Hour as a preview only; it does not recompute ΔT or call Score.
+- Map layers: isolines burned into the heat canvas; Social Vulnerability Index tracts; SunCalc shade on OpenStreetMap footprints; indoor pins; Open Source Routing Machine walk from the hotspot.
+- Scorecard overlay (Duration / Place / Brief): hours-versus-streak charts, unrelieved-heat ratio, heat × vulnerability, cooling-site list, literature canopy slider, planner brief.
+- **Export** (after Score) downloads scorecard JSON, area-of-interest and hotspot GeoJSON, the planner brief, and tile payloads when present. A share URL restores the box, date, optional end date, and hour — it does not auto-score.
 
-## How a session works
+### Tools (`/tools`)
 
-```mermaid
-flowchart LR
-  A["1. Search or draw<br/>US box under 45 mi²"] --> B["2. Day or Range<br/>From + Hour · To ≤ 7 days"]
-  B --> C["3. Score area<br/>TCM + duration"]
-  C --> D["4. Read layers<br/>SVI · shade · walk"]
-  D --> E["5. Decide<br/>trees / pavement"]
-```
-
-1. Open **`/app`** (or **Score a neighborhood** from `/`). **Search** a US city or neighborhood, or click **Draw area** and drag a box (Space pans, scroll still zooms). Stay under **45 mi²**.
-2. Leave **From = 2024-07-15** and **Hour = 15:00** for the demo (historic summer; Phoenix 2026-08-17 can return 0 tiles and still bill). **Day** scores one date. **Range** adds **To** (max 7 inclusive days). TCM, shade, and comfort always use **From + Hour**.
-3. Click **Score area**. Heatmap appears first. SVI, OSM, walk, and satellite follow. The brief starts as a template, then rewrites. Export when you want a file.
-4. Toggle **Isolines / SVI / Shade / Cooling / Walk**. Switch **Flat → 3D heat** and right-drag to orbit.
-5. Use **+10% / +20% canopy** only as a labeled estimate. FortyGuard does **not** recompute.
-
-Duration mapping (honest FortyGuard `filter_type`):
-
-| UI | Duration request | TCM / shade / comfort |
-|---|---|---|
-| **Day** (From = To) | `filter_type=3`, no `end_date` (existing one-day caches still hit) | From + Hour (`filter_type=1`) |
-| **Range** 2–7 days | `end_date` + `filter_type=4` (range-of-days product, not a custom 3-day exceedance) | Still From + Hour |
-
-**Range ΔT:** when From ≠ To, Score also fetches a second TCM at **To + the same Hour** and maps **ΔT (range)** (To − From) plus noisy **ΔT edges** (|∇ΔT|). Positive tiles got hotter. **Play** only cycles Hour as a preview; it does **not** recompute ΔT or run Score.
+A first-class workspace on the same share parameters (`west`, `south`, `east`, `north`, `date`, `time`). Every tool auto-loads the free Open-Meteo hourly series after the URL hydrates. None of them auto-score FortyGuard tiles.
 
 ---
 
-## Every control, what it is, why it is useful
-
-```mermaid
-flowchart TB
-  subgraph heat [FortyGuard]
-    T["Heat tiles · TCM °C"]
-    X["Exceedance · hours ≥ 35 °C"]
-    P["Persistence · longest streak"]
-  end
-  subgraph context [Public context]
-    S["SVI · CDC/ATSDR 2022"]
-    H["Shade · OSM + sun"]
-    C["Cooling · OSM libraries"]
-    W["Walk · OSRM to indoor"]
-  end
-  T --> S
-  X --> S
-  T --> H
-  T --> C
-  C --> W
-```
-
-### Header
-
-| Control | What it does | Example |
-|---|---|---|
-| **Search** | Nominatim, US only | Type `Houston EaDo` → pick East Downtown |
-| **Day / Range** | One date vs From–To (max 7 days) | Range: From `2024-07-15` To `2024-07-18` |
-| **Date / From / To / Hour** | Historic snapshot + duration window | Demo: `2024-07-15` `15:00` |
-| **Play** | Cycles Hour only (Range). Does not Score, does not recompute ΔT | Preview afternoon vs evening before you spend credits |
-| **Score area** | TCM + exceedance + persistence on the drawn polygon | Enabled only when the box is 0.04–45 mi² |
-| **Export** | Client downloads after Score | JSON, GeoJSON, brief `.txt` — no API keys |
-| **Scorecard** | Opens the right drawer (large screens) or bottom sheet (narrow) | Sits next to Export when the drawer is hidden |
-
-### Map tools (left rail)
-
-| Control | What it does | Why |
-|---|---|---|
-| **Pan** | Left-drag pans; right/Ctrl-drag orbits the AOI | Inspect without losing the heat raster |
-| **Draw area** | Left-drag a new box | “This construction pad”, not a whole county |
-| **Orbit** | Left-drag orbits around the heat centroid | 3D inspect; native map rotate would slide heat off-screen |
-| **Reset view** | Frames the AOI | After you have flown around |
-
-### View
-
-| Control | What it does | Example |
-|---|---|---|
-| **Flat** | 2D scorecard (default) | Judging screenshot, legend readable |
-| **3D heat** | Pitch + extruded OSM buildings when loaded | Show the pad in context; still the same 100 m tiles |
-
-![3D heat: pitched East Downtown with the same 37.1 °C hotspot](docs/images/heatcast-3d.png)
-
-On the map chrome after Score: **Air temperature** vs **Hours above threshold** vs **Longest streak**. After a Range Score, also **ΔT (range)** and **ΔT edges**.
-
-### Layers
-
-| Layer | Source | On the map | Useful for | Not useful for |
-|---|---|---|---|---|
-| **Isolines** | Contours burned into the heat canvas | °C lines (e.g. 33.5–36.0) | Seeing gradients inside the box | Claiming sidewalk precision |
-| **SVI** | CDC/ATSDR 2022, SVG overlay | Violet tracts; click a tract | Equity: Tract 3123 at 94th percentile | Calling SVI a FortyGuard product |
-| **Shade** | OSM footprints + SunCalc | Footprints + umbra | “Is there any building shade at 15:00?” | FG-measured shade or tree canopies |
-| **Cooling** | OSM libraries / community centres | Icon-only markers | “HPL Express is in the box” | Official cooling-center registries |
-| **Walk** | OSRM walking, SVG polyline | Hotspot → indoor site + Area-card legend | “How far is indoor space from the hotspot?” | Citywide cool-commute planning |
-
-![SVI (violet) and cooling pins (library / social facility) over the scored box](docs/images/heatcast-shade-cooling.png)
-
-Toggles stay usable as soon as Score returns. Labels show **Shade…** / **Cooling…** while Overpass loads. Walk legend lives in the left-rail **Area** card (`Hotspot → {site}` + minutes), not as a wide map pill.
-
-### Right panel (scorecard overlay)
-
-One right drawer (~21 rem) overlays the map. Header stays full width (`inset-x-4`); it does **not** shrink when the drawer opens. Tabs after Score: **Duration** (or **Day** + **Range** when From ≠ To) · **Place** · **Brief**. Narrow screens use the same tabs in a bottom sheet.
-
-| Block | What it is | Example from EaDo |
-|---|---|---|
-| **Duration charts** | Share ≥ threshold bar, hours-vs-streak bars, hours histogram | Already-fetched layers — not a new heatmap |
-| **Unrelieved-heat ratio** | Mean streak ÷ mean hours, clipped 0–1 | Gauge + method blurb (NIOSH / OSHA cite) |
-| **Scorecard** | Mean/max °C and hours ≥ threshold | 5.09 h mean, 8.46 h max |
-| **Range ΔT** | To − From at the scored Hour | Mean ΔT on the Range tab; map toggles for tiles / edges |
-| **Heat × vulnerability** | SVI joined to tiles | Tract 3123, priority 0.71 |
-| **Cooling sites** | OSM list + walk | Library, Star of Hope |
-| **Tree canopy slider** | Air CE ~0.015 °C per 1% canopy, cap 2 °C | +20% → about −0.30 °C on the overlay |
-| **Planner brief** | Template immediately; DeepSeek after satellite+SVI | EPA / i-Tree only when percents exist |
-| **Coverage** | Tile count, cached vs live, datetime | `live · 417 tiles · 2024-07-15T15:00` |
-| **Hottest tile** | Lat/lon, satellite class mix, optional street view | Roads 52%, plant 10% |
-
----
-
-## Honesty (do not weaken for the video)
-
-- FortyGuard is **central**. Tiles are ~100 m neighborhood UHI, not sidewalk CFD. It is **one API** among several (CDC SVI, OSM, OSRM, Open-Meteo). Coverage is **United States only**.
-- Area cap **~45 mi²**. We ship **100 m** granularity. Area mi² uses WGS84 metres-per-degree with **cos(lat)** on longitude.
-- The canopy slider is a **literature overlay** (~0.015 °C air per 1% canopy, band 0.10–0.20 °C per +10 points, cap 2 °C). **Not** a new FortyGuard heatmap. Do **not** use LST CE (~0.075 °C per 1%).
-- `heat_index_celsius` from FG `env_params` is humidity at a fixed T, not a diurnal curve. Duration = **exceedance hours** + **persistence streak**. Afternoon comfort chip = **Open-Meteo**.
-- Phoenix **`2026-08-17` can complete with 0 tiles and still be billed**. Coverage miss, not 0 °C. Demo date: **`2024-07-15 15:00`**.
-- Failed FG tasks are free; **empty successful heatmaps still cost**. Cache AOI + datetime + analytic type.
-- OSM libraries are **not** an official cooling-center registry. Shade is geometry, not a FortyGuard product. Walk is OSRM to the nearest indoor OSM site, not a cool-route optimizer.
-- Range ΔT is two TCM snapshots at one clock hour. ΔT edges are noisy 100 m gradients, not a heat flux. Play does not animate N deltas.
-
-Do **not** expand into India, UTCI, NWS HeatRisk, deck.gl, bus-stop clones, a citywide cool-route app, or a second product.
-- `/tools` inferences stay labeled: cooling-plan roof/pavement are literature air estimates; peak hours are a neighborhood heat-load proxy (not MW / EIA / duck curve); compound hours use Open-Meteo humidity / US AQI; site hours are an Open-Meteo table (not PUE); shift window is heat + GHI (not gCO2/kWh); district score is a HeatCast 0–100 index (not insurance). Never invented CO2 or methane.
-
----
-
-## Tools workspace (`/tools`)
-
-A small HeatCast suite on the **same US box and demo date**. Inspired by webinar example apps, but HeatCast-named and honest about data. FortyGuard remains one measurement API.
-
-| Tool | Infers from | Does not claim |
-|---|---|---|
-| **Site hours** | Open-Meteo hourly air, apparent, RH, GHI, and a cooling-demand proxy (degree-hours above threshold). After Score: FG mean at the selected hour. | Data-center PUE. A cached diurnal FortyGuard TCM. |
-| **Peak hours** | Open-Meteo hourly 2 m air → degree-hours above threshold + unrelieved streak. Optional GHI panel (Open-Meteo). After Score: FG mean hours / streak / unrelieved ratio. | Transformer MW, duck curve, EIA. |
-| **Compound hours** | Open-Meteo heat + RH; US AQI when the free series lands. | FortyGuard env AQI (this enrich path does not request it). CO2 / methane. |
-| **Shift window** | Coolest 4 h daylight block from Open-Meteo heat-load + GHI. Hottest block to avoid. | Grid carbon, gCO2/kWh, Electricity Maps, EIA. |
-| **Cooling plan** | Open-Meteo air at the selected hour immediately; scored TCM mean after Score. Canopy air CE (~0.015 °C / 1%). Optional cool-roof (~0.008 °C / 1%) and pavement (~0.005 °C / 1%) literature levers. Attribution bars. Satellite mix at the hotspot if enrich already returned buckets. | A new FortyGuard heatmap. Invented 52.7% building shares. LST CE. |
-| **Walk exposure** | OSM indoor sites + OSRM from the box center immediately. After Score: hotspot origin + nearest TCM samples. | Cargo, vaccines, WBGT, OSHA, multi-stop logistics, official cooling-center scrape. |
-| **District score** | 0–100 HeatCast index: intensity (mean vs threshold), exceedance hours, unrelieved streak. Open-Meteo preview first; FG after Score; optional CDC SVI overlay. | Insurance, FICO of heat, parametric payout. |
-
-Share params (`west`, `south`, `east`, `north`, `date`, `time`) match `/app`. Tools does **not** auto-score tiles (saves credits). All tools auto-load the free Open-Meteo hourly series after the URL hydrates. Walk also loads OSM indoor sites. Default preset is Houston EaDo; Houston threshold 35 °C, Phoenix 38 °C. Demo date **2024-07-15 15:00**.
-
----
-
-## Architecture
+## How it works
 
 ```
-heatlens/
-  api/                 FastAPI (port 8000) — FortyGuard, cache, scoring, brief
-  web/                 Next.js 16 + MapLibre 6 (port 3000)
-  docs/images/         README screenshots
-  HANDOVER.md          living snapshot for both developers
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│ Next.js web │────▶│ FastAPI          │────▶│ FortyGuard Premium  │
+│ MapLibre 6  │     │ analyze · enrich │     │ TCM · exceedance    │
+│ :3000       │     │ tools · brief    │     │ persistence         │
+└─────────────┘     └──────────────────┘     └─────────────────────┘
+        │                     │
+        │                     ├─ Open-Meteo (air, RH, GHI, US AQI)
+        │                     ├─ OpenStreetMap Overpass
+        │                     ├─ Open Source Routing Machine
+        │                     ├─ CDC/ATSDR SVI 2022
+        │                     └─ optional LLM brief (server-side)
+        └─ Esri World Imagery + World_Transportation
+           + World_Boundaries_and_Places
 ```
 
-```mermaid
-flowchart LR
-  subgraph browser [Browser :3000]
-    UI[Search draw Score layers]
-  end
-  subgraph api [FastAPI :8000]
-    A["POST /v1/analyze\nTCM + duration + template brief"]
-    S["POST /v1/svi"]
-    E["POST /v1/enrich\nsatellite + env first"]
-    O["GET cooling / buildings"]
-    W["GET /v1/walk\nOSRM"]
-    T["GET /v1/tools/hours\nPOST cooling + walk + district"]
-    B["POST /v1/brief\nDeepSeek after layers"]
-  end
-  FG[FortyGuard Premium]
-  UI --> A --> FG
-  UI --> S
-  UI --> E --> FG
-  UI --> O
-  UI --> W
-  UI --> T
-  UI --> B
-```
+The FortyGuard API key never leaves `api/.env`. The Next.js app talks only to `NEXT_PUBLIC_API_URL`. Heat fill is a canvas raster draped as a MapLibre **image** source named `heatcast-raster` — not a GeoJSON polygon redraw on every frame.
 
-The FortyGuard key never leaves `api/.env`. The Next app talks only to `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`).
+| Layer | Source | Role |
+|---|---|---|
+| Two-metre air | FortyGuard Thermal Comfort Map, ~100 m | Mean, max, share of tiles above threshold |
+| Hours / streak | FortyGuard exceedance + persistence | Duration on the same grid |
+| Social Vulnerability Index | CDC/ATSDR 2022 census tracts | Equity join; SVG overlay |
+| Indoor pins | OpenStreetMap `library`, `townhall`, `community_centre`, `social_facility` | Access check in the box |
+| Walk | Open Source Routing Machine walking | Hotspot (or box center) → nearest indoor site |
+| Shade | OpenStreetMap footprints + SunCalc | Approximate umbra, not measured canopy |
+| Comfort chip | Open-Meteo | Afternoon heat index / relative humidity at km scale |
+| Basemap | Esri World Imagery + transportation + places | Satellite context under a translucent heat tint |
 
 ---
 
-## Run locally
+## Tools catalog
 
-Need **Python 3.11+**, **Node 20+**, and a FortyGuard API key.
+| Tool | Route | Infers | Does not claim |
+|---|---|---|---|
+| **Site hours** | `/tools/hours` | Open-Meteo hourly two-metre air, apparent temperature, relative humidity, Global Horizontal Irradiance, and a cooling-demand proxy (degree-hours above threshold). After Score, the FortyGuard neighborhood mean sits beside the selected hour. | Data-center power usage effectiveness. A cached diurnal FortyGuard Thermal Comfort Map. |
+| **Peak hours** | `/tools/peak` | Open-Meteo hourly two-metre air → degree-hours above threshold and an unrelieved streak. Optional Global Horizontal Irradiance panel. After Score: FortyGuard mean hours, streak, and unrelieved-heat ratio. | Transformer megawatts, duck curve, or Energy Information Administration series. |
+| **Compound hours** | `/tools/compound` | Hours when heat coincides with high relative humidity and/or Open-Meteo United States Air Quality Index (when the free series lands). | FortyGuard `env_params` Air Quality Index on this path. Carbon dioxide or methane. |
+| **Shift window** | `/tools/shift` | Coolest four-hour daylight block from Open-Meteo heat-load + Global Horizontal Irradiance, plus the hottest block to avoid. | Grid carbon intensity, gCO₂/kWh, Electricity Maps, or Energy Information Administration. |
+| **Cooling plan** | `/tools/cooling` | Literature air-temperature overlay. Sliders run on Open-Meteo air immediately; Score swaps the baseline to the FortyGuard mean. Canopy uses ~0.015 °C air per 1% canopy. Optional cool-roof (~0.008 °C per 1%) and pavement (~0.005 °C per 1%) levers, attribution bars, satellite mix at the hotspot if enrich already returned buckets. | A new FortyGuard heatmap. Land-surface-temperature cooling efficiency. Invented building-share percents. |
+| **Walk exposure** | `/tools/walk` | OpenStreetMap indoor sites + Open Source Routing Machine from the box center immediately. After Score: hotspot origin and nearest Thermal Comfort Map samples along the line. Walk destinations are `library`, `townhall`, `community_centre`, and `social_facility` only. | Cargo, vaccines, wet-bulb globe temperature, Occupational Safety and Health Administration limits, multi-stop logistics, or an official cooling-center registry. |
+| **District score** | `/tools/district` | 0–100 HeatCast index from mean air versus threshold, exceedance hours, and unrelieved streak. Open-Meteo preview first; FortyGuard after Score; optional Social Vulnerability Index overlay. | Insurance, a FICO of heat, or a parametric payout. |
+
+Default preset is Houston East Downtown (threshold **35 °C**). Phoenix downtown uses **38 °C**. Demo datetime is **2024-07-15 15:00**.
+
+---
+
+## Scoring rules
+
+Coverage is the **United States only**. The drawn polygon must be **0.04–45 mi²**. Area uses WGS84 metres-per-degree of latitude, with longitude scaled by **cos(latitude)** — not Web Mercator.
+
+Granularity is **~100 m** Thermal Comfort Map tiles (two-metre air), not sidewalk computational fluid dynamics.
+
+**Threshold.** Houston and most of the contiguous United States use **35 °C**. A Phoenix-like box (`latitude > 32.5` and `longitude < −110`) uses **38 °C**.
+
+**Duration.** Same From and To → exceedance/persistence `filter_type=3` (one day, no `end_date`). A 2–7 day span → `end_date` + `filter_type=4` (range-of-days product, not a custom N-day exceedance). Air tiles, shade, and comfort still use From + Hour (`filter_type=1`).
+
+**Unrelieved-heat ratio.**
+
+```
+unrelieved_heat_ratio = clip(mean_streak_hours / mean_hours_above, 0, 1)
+```
+
+Near 1 means those hours arrived as one unbroken run. This is a HeatCast duration index, not a wet-bulb globe temperature table or an Occupational Safety and Health Administration work/rest schedule. Method copy cites [NIOSH Heat Stress: Work/Rest Schedules (2017-127)](https://www.cdc.gov/niosh/docs/2017-127/pdfs/2017-127.pdf) as context only.
+
+**Literature canopy.** The slider estimates a small air-temperature change from added canopy: central **0.015 °C per 1%** canopy (about 0.10–0.20 °C per +10 percentage points), capped at 2 °C. It is an overlay on existing tiles, not a new FortyGuard heatmap. HeatCast does not apply land-surface-temperature cooling efficiency (~0.075 °C per 1%).
+
+**Range ΔT.** Two Thermal Comfort Map snapshots at one clock hour. ΔT edges are noisy 100 m gradients, not a heat flux.
+
+Presets (all **2024-07-15 15:00**): Houston East Downtown, Houston Museum District, Phoenix Downtown.
+
+---
+
+## Quick start
+
+Requires **Python 3.11+**, **Node 20+**, and a FortyGuard API key.
 
 ### 1. API
 
+**Windows (PowerShell)**
+
 ```powershell
-cd D:\fortyguard\heatlens
+git clone https://github.com/Galabavamsi/heatcast.git
+cd heatcast
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r api\requirements.txt
 copy api\.env.example api\.env
-# put FORTYGUARD_API_KEY in api/.env
+# set FORTYGUARD_API_KEY in api/.env
+cd api
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**macOS / Linux**
+
+```bash
+git clone https://github.com/Galabavamsi/heatcast.git
+cd heatcast
+python -m venv .venv
+source .venv/bin/activate
+pip install -r api/requirements.txt
+cp api/.env.example api/.env
+# set FORTYGUARD_API_KEY in api/.env
 cd api
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -296,120 +170,115 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ### 2. Web
 
 ```powershell
-cd D:\fortyguard\heatlens\web
+cd web
 npm install
 npm run dev
 ```
 
-Open **http://localhost:3000** (landing), then **Score a neighborhood** → **http://localhost:3000/app**. Tools is `/tools` (hard-refresh after pull). Method is `/method`. Repeat the East Downtown example above. Hard-refresh after `package.json` changes.
-
-### Env (`api/.env` — gitignored)
-
-| Variable | Required | Notes |
-|---|---|---|
-| `FORTYGUARD_API_KEY` | yes | Server only |
-| `FORTYGUARD_BASE_URL` | no | Default `https://api.fortyguard.com` |
-| `PORT` | no | Bind `0.0.0.0:$PORT` on Render |
-| `LLM_API_KEY` | no | Planner brief; without it, template paragraphs |
-| `LLM_BASE_URL` | no | DeepSeek: `https://api.deepseek.com/v1` |
-| `LLM_MODEL` | no | **`deepseek-v4-flash`** (default) or `deepseek-v4-pro`. No `deepseek-chat`. |
-
-`web/.env.local` (optional): `NEXT_PUBLIC_API_URL=http://localhost:8000`.
-
-Never commit `.env`, keys, or `api/cache/`.
+Open [http://localhost:3000](http://localhost:3000) (Home), [http://localhost:3000/app](http://localhost:3000/app) (Score), [http://localhost:3000/tools](http://localhost:3000/tools), and [http://localhost:3000/method](http://localhost:3000/method).
 
 ### Tests
 
 ```powershell
-cd D:\fortyguard\heatlens\api
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+cd api
+python -m unittest discover -s tests -v
 ```
-
-Demo presets in `api/app/cities.py`: Houston EaDo, Houston Museum District, Phoenix Downtown — all **2024-07-15 15:00**. Houston threshold 35 °C; Phoenix 38 °C.
 
 ---
 
-## API (HeatCast FastAPI)
+## Environment
+
+All FortyGuard and language-model secrets stay in **`api/.env`** (gitignored). Never put a FortyGuard key in `NEXT_PUBLIC_*` or in the Vercel web project.
+
+| Variable | Where | Required | Notes |
+|---|---|---|---|
+| `FORTYGUARD_API_KEY` | `api/.env` | yes | Server only |
+| `FORTYGUARD_BASE_URL` | `api/.env` | no | Default `https://api.fortyguard.com` |
+| `PORT` | `api/.env` / host | no | Bind `0.0.0.0:$PORT` (Railway injects `PORT`) |
+| `LLM_API_KEY` | `api/.env` | no | Planner brief. Without it, Score uses a template memo |
+| `LLM_BASE_URL` | `api/.env` | no | DeepSeek: `https://api.deepseek.com/v1` |
+| `LLM_MODEL` | `api/.env` | no | Default `deepseek-v4-flash` |
+| `CORS_ORIGINS` | `api/.env` | no | Extra origins. localhost and `https://*.vercel.app` are always allowed |
+| `NEXT_PUBLIC_API_URL` | `web/.env.local` | no | Default `http://localhost:8000`. Production must be the public API URL **before** the web build |
+| `NEXT_PUBLIC_CARTO_API_KEY` | `web/.env.local` | no | Optional Carto dark basemap. Without it, HeatCast uses keyless Esri World Imagery |
+
+Do not commit `.env`, keys, or `api/cache/`.
+
+---
+
+## API surface
+
+Production: [https://heatcast-api-production.up.railway.app](https://heatcast-api-production.up.railway.app) · health: [`GET /health`](https://heatcast-api-production.up.railway.app/health)
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Liveness |
-| GET | `/v1/cities` | Presets + scenario model meta |
-| GET | `/v1/geocode` | Nominatim, `countrycodes=us` |
-| POST | `/v1/analyze` | TCM + exceedance + persistence + optional Range ΔT + scorecard + **template** memo. Must not wait on enrich or LLM. Same day: duration `filter_type=3`. 2–7 days: `end_date` + `filter_type=4`. |
-| GET | `/v1/walk` | OSRM walking, US-only, fail-open. Hotspot → indoor OSM site. |
-| POST | `/v1/brief` | Rewrite planner brief after satellite / SVI / OSM. |
-| POST | `/v1/enrich` | Satellite + env (~45 s), then optional streetview / PDF (~12 s). Fail-open. |
-| POST | `/v1/svi` | CDC/ATSDR SVI 2022 tracts joined to heatmap |
-| GET | `/v1/buildings` | OSM footprints (empty FC + `meta.error` on failure, not HTTP 502) |
-| GET | `/v1/cooling` | OSM indoor public sites |
-| GET | `/v1/osm` | Both OSM layers |
-| GET | `/v1/weather` | Open-Meteo rain / heat index / hourly + GHI + optional US AQI + FEMA chip + USGS elevation |
-| GET | `/v1/tools/hours` | Open-Meteo peak, compound, site-hours, shift window, district preview (no FortyGuard call) |
-| POST | `/v1/tools/cooling` | Literature cooling-plan attribution (no FortyGuard call) |
-| POST | `/v1/tools/walk-exposure` | Nearest TCM tile along an OSRM polyline |
-| POST | `/v1/tools/district-index` | 0–100 HeatCast index from scorecard fields (not insurance) |
-| POST | `/v1/scenario` | Literature ΔT without re-running FortyGuard |
-| GET | `/v1/credits` | Key usage, secrets stripped |
-| GET | `/v1/outputs/{file}` | Heat-intelligence PDF |
+| `GET` | `/health` | Liveness (`{"ok": true, "service": "heatcast"}`) |
+| `GET` | `/v1/cities` | Demo presets and scenario-model metadata |
+| `GET` | `/v1/geocode` | Nominatim, United States only |
+| `POST` | `/v1/analyze` | Thermal Comfort Map + exceedance + persistence + optional Range ΔT + scorecard + template brief. Does not wait on enrich or the language model |
+| `POST` | `/v1/enrich` | Satellite mix and environmental parameters, then optional street view. Fail-open |
+| `POST` | `/v1/brief` | Rewrite the planner brief after satellite / Social Vulnerability Index / OpenStreetMap land |
+| `POST` | `/v1/svi` | CDC/ATSDR Social Vulnerability Index 2022 tracts joined to the heatmap |
+| `GET` | `/v1/walk` | Open Source Routing Machine walking, United States only, fail-open |
+| `GET` | `/v1/cooling` | OpenStreetMap indoor public sites |
+| `GET` | `/v1/buildings` | OpenStreetMap footprints |
+| `GET` | `/v1/weather` | Open-Meteo rain / heat index / hourly + Global Horizontal Irradiance + optional United States Air Quality Index |
+| `GET` | `/v1/tools/hours` | Open-Meteo peak, compound, site-hours, shift window, and district preview (no FortyGuard call) |
+| `POST` | `/v1/tools/cooling` | Literature cooling-plan attribution (no FortyGuard call) |
+| `POST` | `/v1/tools/walk-exposure` | Nearest Thermal Comfort Map sample along an Open Source Routing Machine polyline |
+| `POST` | `/v1/tools/district-index` | 0–100 HeatCast index from scorecard fields |
+| `POST` | `/v1/scenario` | Literature ΔT without re-running FortyGuard |
 
-FortyGuard Premium (server-side): `tcm`, `exceedance`, `persistence`, `environmental_parameters`, `satellite_segmentation`, `street_view_segmentation` (often times out), `heat_intelligence` PDF.
-
-Non-FG: Open-Meteo (including free GHI + US AQI for Tools), OSM Overpass, OSRM, FEMA NFHL, USGS 3DEP, CDC/ATSDR SVI 2022, optional DeepSeek.
+FortyGuard products used server-side: `tcm`, `exceedance`, `persistence`, `environmental_parameters`, `satellite_segmentation`. Failed FortyGuard tasks are not billed; an empty successful heatmap still is. Cache key is area of interest + datetime + analytic type.
 
 ---
 
-## Map implementation (do not “simplify”)
+## Deploy
 
-Reverting these makes heat/SVI/shade/walk vanish or slide off-screen.
+| Surface | Host | Live URL |
+|---|---|---|
+| Web | Vercel (`web/` via repo `vercel.json`) | https://web-pearl-ten-99.vercel.app |
+| Score | same | https://web-pearl-ten-99.vercel.app/app |
+| Tools | same | https://web-pearl-ten-99.vercel.app/tools |
+| Method | same | https://web-pearl-ten-99.vercel.app/method |
+| API | Railway (`api/`, `railpack.json`) | https://heatcast-api-production.up.railway.app |
+| API health | Railway | https://heatcast-api-production.up.railway.app/health |
 
-1. Heat fill is a **canvas raster** draped as MapLibre **image** source `heatcast-raster`. Do not redraw heat polygons on every `render`.
-2. Do not `flyTo` on every AOI drag. Scroll zoom always on. Draw = left-drag. Space pans.
-3. Cyan AOI mask is an **SVG quad** from four `map.project` corners.
-4. MapLibre fill/line layers do **not** show reliably. SVI and shade are **SVG**. Isolines are **burned into** the heat canvas. Cooling uses **react-map-gl Marker**. Walk is an **SVG polyline**. Trees are **Marker**.
-5. Native `dragRotate` slides heat off-screen. Custom orbit uses `easeTo({ around })`. `jumpTo` ignores `around`.
+Set `NEXT_PUBLIC_API_URL` on the Vercel project to the public Railway API origin **before** building the web app. Set `FORTYGUARD_API_KEY` (and optional `LLM_*`) only on the API service. CORS already allows `https://*.vercel.app`.
 
-Full gotcha list: [HANDOVER.md](./HANDOVER.md).
-
----
-
-## Deploy (Render)
-
-Two services (`render.yaml`): **heatcast-api** (FastAPI) and **heatcast-web** (Next.js). One process each. Bind HTTP to **`0.0.0.0:$PORT`**.
-
-Apply the Blueprint: [dashboard.render.com/blueprint/new?repo=https://github.com/Galabavamsi/heatcast](https://dashboard.render.com/blueprint/new?repo=https://github.com/Galabavamsi/heatcast)
-
-| Service | Confirm in Dashboard (names only) |
-|---|---|
-| **API** | `FORTYGUARD_API_KEY` (required). Optional: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `CORS_ORIGINS` (web origin once you have it). |
-| **Web** | `NEXT_PUBLIC_API_URL` = the **public API URL** (set **before** the web build). Never put FortyGuard keys on the web service. |
-
-- Filesystem is **ephemeral** — freeze demo caches before judging, or accept re-bills.
-- CORS allows localhost plus `https://*.onrender.com` (and `CORS_ORIGINS`).
-- After deploy: `GET {API}/health` then open `{WEB}/app`.
-
-Public URLs: **pending first Render apply** (this machine has no Render workspace session). Demo caches are **not frozen**. The ~3 min video and ~500-word summary are **not started**. Deadline **30 Aug 2026**.
+A `render.yaml` Blueprint remains in the repo if you prefer two Render web services instead of Vercel + Railway. Bind HTTP to `0.0.0.0:$PORT` on either host. The filesystem is ephemeral — demo caches are not frozen across deploys.
 
 ---
 
-## Research and product locks
+## Demo video
 
-| File | Role |
-|---|---|
-| [HANDOVER.md](./HANDOVER.md) | Living status, changelog, open work, map gotchas. **Wins** if research still says “no OSRM”. |
-| [RESEARCH-3D-URBAN.md](./RESEARCH-3D-URBAN.md) | Current product lock (Track 1). Walk/OSRM lines there are superseded. |
-| [RESEARCH-SIMULATOR.md](./RESEARCH-SIMULATOR.md) | API + scenario formula |
-| [RESEARCH-PIVOT.md](./RESEARCH-PIVOT.md) | Superseded Track 3 hero; keep FG date/cache rules only |
+Walkthrough clips live in this Drive folder:
 
-`D:\fortyguard\temperature-api-quickstart` is **reference only**. Do not ship it.
+https://drive.google.com/drive/folders/1GTT19Evm6FhZMA4eqyBQGxRledEz03Je?usp=drive_link
+
+Suggested live path for a recording: Home → Score (Houston East Downtown, **2024-07-15 15:00**, box under 45 mi²) → Tools (Open-Meteo views) → Method.
 
 ---
 
-## Links
+## Limits
 
-- FortyGuard API: https://docs-api.fortyguard.com
-- Create heatmap: https://docs-api.fortyguard.com/docs/create-heatmap
-- Limitations / billing: https://docs-api.fortyguard.com/docs/limitations
-- Hackathon: https://www.fortyguard.com/hackathon26
-- Slack: **fortyguardhackthon26** (spelling as on the invite)
-- GitHub: https://github.com/Galabavamsi/heatcast
+- **Historic dates.** Prefer a covered summer afternoon such as `2024-07-15 15:00`. A “today” or future date can complete with **zero tiles** and still be billed — that is a coverage miss, not 0 °C.
+- **United States only.** No international Thermal Comfort Map path.
+- **Neighborhood UHI, not sidewalk CFD.** Tiles are ~100 m.
+- HeatCast does **not** compute wet-bulb globe temperature, Universal Thermal Climate Index, National Weather Service HeatRisk, Occupational Safety and Health Administration exposure limits, insurance scores, or grid carbon / gCO₂/kWh.
+- OpenStreetMap libraries and community centres are **not** an official cooling-center list. Shade is geometry plus sun position, not a FortyGuard shade product. Walk is a single hotspot-to-indoor check, not a citywide cool-route planner.
+- The canopy / roof / pavement sliders are **literature air estimates** on existing measurements. They do not re-simulate FortyGuard.
+- Range ΔT is two snapshots at one clock hour. Play does not animate a ΔT movie.
+- Afternoon comfort from Open-Meteo is kilometer-scale context, labeled separately from FortyGuard tiles.
+
+Honest layer notes also live on the in-app [Method](https://web-pearl-ten-99.vercel.app/method) page.
+
+---
+
+## License and credit
+
+Source: [github.com/Galabavamsi/heatcast](https://github.com/Galabavamsi/heatcast).
+
+Built for FortyGuard Hackathon ’26 · Team HumanSlop · FG-141 · Track 1.
+
+FortyGuard, OpenStreetMap, Open-Meteo, Esri, CDC/ATSDR, and Open Source Routing Machine remain the rights of their respective owners. HeatCast scores a district and layers public context; it does not replace those products.
