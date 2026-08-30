@@ -635,7 +635,7 @@ function applyHeatRaster(
         paint: {
           "raster-fade-duration": 280,
           "raster-opacity": rasterOpacity,
-          "raster-resampling": "linear",
+          "raster-resampling": "linear" as const,
         },
       };
       if (map.getLayer(PLACES_LAYER_ID)) map.addLayer(heatLayer, PLACES_LAYER_ID);
