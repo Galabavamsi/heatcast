@@ -66,12 +66,21 @@ ENRICH_CORE_S = 45.0
 ENRICH_EXTRA_S = 12.0
 
 app = FastAPI(title="HeatCast", version="0.4.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+
+
+def _cors_origins() -> list[str]:
+    extra = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    return [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-    ],
+        *extra,
+    ]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
