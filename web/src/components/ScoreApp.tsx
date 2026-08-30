@@ -34,7 +34,7 @@ import {
   downloadTilesGeoJson,
   tilesFeatureCollection,
 } from "@/lib/export";
-import { parseShareParams, sharePath } from "@/lib/share";
+import { parseShareParams, sharePath, shareQuery } from "@/lib/share";
 import ExportMenu from "@/components/ExportMenu";
 import { SiteNav } from "@/components/SiteNav";
 import {
@@ -672,6 +672,9 @@ export default function ScoreApp() {
   const rain = analysis?.rain ?? weather?.rain ?? null;
   const flood = analysis?.flood ?? weather?.flood ?? null;
   const scoring = busy === "analyze";
+  const navQuery = aoi
+    ? shareQuery(aoi, startDate, startTime, dateMode === "range" ? endDate : null)
+    : "";
   const exportBundle = useMemo(() => {
     if (!analysis || !aoi) return null;
     return {
@@ -859,7 +862,7 @@ export default function ScoreApp() {
 
       <header className="heatcast-glass pointer-events-auto absolute inset-x-4 top-4 z-20 flex flex-col gap-2 rounded-xl px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
-          <SiteNav active="score" compact />
+          <SiteNav active="score" compact query={navQuery} />
           <div className="relative min-w-0 flex-1">
             <input
               value={query}

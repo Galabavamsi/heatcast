@@ -59,3 +59,14 @@ export function shareQuery(bbox: BBox, date: string, time: string, end?: string 
 export function sharePath(bbox: BBox, date: string, time: string, end?: string | null): string {
   return `/app${shareQuery(bbox, date, time, end)}`;
 }
+
+export function toolsSharePath(
+  bbox: BBox,
+  date: string,
+  time: string,
+  end?: string | null,
+  tool?: string | null,
+): string {
+  const base = tool ? `/tools/${tool}` : "/tools";
+  return `${base}${shareQuery(bbox, date, time, end)}`;
+}

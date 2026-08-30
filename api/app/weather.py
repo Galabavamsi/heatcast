@@ -20,7 +20,7 @@ def fetch_precip(
     hour: str | None = None,
     timezone: str = "America/Chicago",
 ) -> dict[str, Any]:
-    key = cache.cache_key("openmeteo_climate_v2", round(lat, 4), round(lon, 4), date, timezone)
+    key = cache.cache_key("openmeteo_climate_v3", round(lat, 4), round(lon, 4), date, timezone)
     hit = cache.load(key)
     if hit is not None:
         hit["cached"] = True
@@ -75,7 +75,7 @@ def _open_meteo(base: str, lat: float, lon: float, date: str, timezone: str) -> 
         "longitude": round(lon, 5),
         "start_date": date,
         "end_date": date,
-        "hourly": "precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,apparent_temperature",
+        "hourly": "precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m,apparent_temperature,shortwave_radiation",
         "daily": "precipitation_sum,precipitation_hours,rain_sum",
         "timezone": timezone,
         "wind_speed_unit": "ms",
@@ -109,6 +109,7 @@ def _open_meteo(base: str, lat: float, lon: float, date: str, timezone: str) -> 
         "hourly_rh": hourly.get("relative_humidity_2m") or [],
         "hourly_wind_ms": hourly.get("wind_speed_10m") or [],
         "hourly_apparent_c": hourly.get("apparent_temperature") or [],
+        "hourly_ghi": hourly.get("shortwave_radiation") or [],
         "attribution": "Weather data by Open-Meteo.com (CC BY 4.0)",
         "caveat": (
             "Open-Meteo reanalysis/forecast grid is several km — evaporative cooling context, "
@@ -204,6 +205,32 @@ def _comfort_at(payload: dict[str, Any], idx: int) -> dict[str, Any]:
         "note": (
             "Heat index from Open-Meteo 2 m T + RH at the scored hour. "
             "Not UTCI (needs mean radiant temperature) and not FortyGuard tiles."
+        ),
+    }
+
+
+def public_hourly(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """24 h Open-Meteo series for Tools. Km-scale — not FortyGuard tiles."""
+    if not payload:
+        return None
+    times = payload.get("hourly_times") or []
+    if not times:
+        return None
+    clocks: list[str] = []
+    for stamp in times:
+        text = str(stamp)
+        clocks.append(text.split("T", 1)[1][:5] if "T" in text else text[:5])
+    return {
+        "times": clocks,
+        "temp_c": payload.get("hourly_temp_c") or [],
+        "rh_pct": payload.get("hourly_rh") or [],
+        "apparent_c": payload.get("hourly_apparent_c") or [],
+        "ghi_wm2": payload.get("hourly_ghi") or [],
+        "source": payload.get("source") or "open-meteo",
+        "attribution": payload.get("attribution") or "Weather data by Open-Meteo.com (CC BY 4.0)",
+        "caveat": (
+            "Open-Meteo 2 m air and GHI, several km. Neighborhood heat-load hours — "
+            "not FortyGuard 100 m tiles, not EIA, not transformer MW."
         ),
     }
 

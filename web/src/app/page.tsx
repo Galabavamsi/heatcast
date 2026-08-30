@@ -16,12 +16,18 @@ export default function LandingPage() {
         <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-400">
           Draw a district. See how long the air stays hot, how far the hotspot is from indoor public space, and where a planting sketch would land. Then export the brief.
         </p>
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap gap-3">
           <Link
             href="/app"
             className="inline-flex rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-[#0b0d10] transition hover:bg-cyan-300"
           >
             Score a neighborhood
+          </Link>
+          <Link
+            href="/tools"
+            className="inline-flex rounded-lg border border-[#2a313c] px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-cyan-400/50"
+          >
+            Open tools
           </Link>
         </div>
 

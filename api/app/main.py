@@ -60,7 +60,11 @@ from .delta import build_delta_layer  # noqa: E402
 from .scoring import score_aoi, slim_heatmap  # noqa: E402
 from .svi import SviError, svi_for_bbox  # noqa: E402  # CDC SVI 2022 overlay
 from .unrelieved import unrelieved_scorecard  # noqa: E402
-from .weather import fetch_elevation_m, fetch_precip  # noqa: E402
+from .air_quality import fetch_us_aqi  # noqa: E402
+from .cooling_plan import estimate_cooling_plan  # noqa: E402
+from .hours_infer import infer_compound_hours, infer_peak_hours  # noqa: E402
+from .walk_exposure import sample_walk_exposure  # noqa: E402
+from .weather import fetch_elevation_m, fetch_precip, public_hourly  # noqa: E402
 
 ENRICH_CORE_S = 45.0
 ENRICH_EXTRA_S = 12.0
@@ -133,6 +137,22 @@ class SviRequest(BaseModel):
     north: float | None = None
     bbox: list[float] | None = None
     heatmap: dict[str, Any] | None = None
+
+
+class CoolingPlanRequest(BaseModel):
+    canopy_delta_pct: float = 0.0
+    roof_delta_pct: float = 0.0
+    pavement_delta_pct: float = 0.0
+    current_canopy_pct: float | None = None
+    mean_c: float | None = None
+    mean_hours: float | None = None
+    threshold_c: float = 35.0
+
+
+class WalkExposureRequest(BaseModel):
+    coordinates: list[list[float]]
+    heatmap: dict[str, Any] | None = None
+    threshold_c: float = 35.0
 
 
 class BriefRequest(BaseModel):
@@ -334,6 +354,7 @@ def weather(
     rain = fetch_precip(lat, lon, date, hour=time, timezone=tz)
     flood = fetch_flood_zone(lat, lon)
     elevation_m = fetch_elevation_m(lat, lon)
+    aqi = fetch_us_aqi(lat, lon, date, timezone=tz)
     return {
         "lat": lat,
         "lon": lon,
@@ -342,6 +363,17 @@ def weather(
         "timezone": tz,
         "rain": _public_rain(rain),
         "comfort": rain.get("comfort") if rain else None,
+        "hourly": public_hourly(rain),
+        "aqi": {
+            "ok": aqi.get("ok"),
+            "source": aqi.get("source"),
+            "us_aqi": aqi.get("us_aqi") or [],
+            "pm25": aqi.get("pm25") or [],
+            "times": aqi.get("times") or [],
+            "attribution": aqi.get("attribution"),
+            "caveat": aqi.get("caveat"),
+            "cached": aqi.get("cached"),
+        },
         "flood": flood,
         "elevation_m": elevation_m,
     }
@@ -404,6 +436,81 @@ def scenario(body: ScenarioRequest) -> dict[str, object]:
         mean_hours=body.mean_hours,
         threshold_c=body.threshold_c,
     )
+
+
+@app.post("/v1/tools/cooling")
+def tools_cooling(body: CoolingPlanRequest) -> dict[str, object]:
+    """Literature cooling-plan attribution. Does not call FortyGuard."""
+    return estimate_cooling_plan(
+        canopy_delta_pct=body.canopy_delta_pct,
+        roof_delta_pct=body.roof_delta_pct,
+        pavement_delta_pct=body.pavement_delta_pct,
+        current_canopy_pct=body.current_canopy_pct,
+        mean_c=body.mean_c,
+        mean_hours=body.mean_hours,
+        threshold_c=body.threshold_c,
+    )
+
+
+@app.post("/v1/tools/walk-exposure")
+def tools_walk_exposure(body: WalkExposureRequest) -> dict[str, object]:
+    """Nearest TCM tile along an OSRM walk. No new heatmap."""
+    return sample_walk_exposure(
+        body.coordinates,
+        body.heatmap,
+        threshold_c=body.threshold_c,
+    )
+
+
+@app.get("/v1/tools/hours")
+def tools_hours(
+    date: str = "2024-07-15",
+    time: str = "15:00",
+    lat: float | None = None,
+    lon: float | None = None,
+    threshold_c: float = 35.0,
+) -> dict[str, object]:
+    """Open-Meteo hour-by-hour heat-load + optional US AQI. Not FG tiles."""
+    if lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Pass lat,lon")
+    if not in_us(lon, lat):
+        raise HTTPException(status_code=400, detail="Hours lookup is US-only.")
+    tz = timezone_for(lon, lat)
+    rain = fetch_precip(lat, lon, date, hour=time, timezone=tz)
+    hourly = public_hourly(rain) or {}
+    aqi = fetch_us_aqi(lat, lon, date, timezone=tz)
+    peak = infer_peak_hours(
+        times=hourly.get("times") or [],
+        temps=hourly.get("temp_c") or [],
+        ghi=hourly.get("ghi_wm2") or [],
+        threshold_c=threshold_c,
+    )
+    compound = infer_compound_hours(
+        times=hourly.get("times") or [],
+        temps=hourly.get("temp_c") or [],
+        rh=hourly.get("rh_pct") or [],
+        us_aqi=aqi.get("us_aqi") or [],
+        threshold_c=threshold_c,
+    )
+    return {
+        "lat": lat,
+        "lon": lon,
+        "date": date,
+        "time": time,
+        "timezone": tz,
+        "threshold_c": threshold_c,
+        "hourly": hourly,
+        "aqi": {
+            "ok": aqi.get("ok"),
+            "source": aqi.get("source"),
+            "us_aqi": aqi.get("us_aqi") or [],
+            "attribution": aqi.get("attribution"),
+            "caveat": aqi.get("caveat"),
+        },
+        "peak": peak,
+        "compound": compound,
+        "comfort": rain.get("comfort") if rain else None,
+    }
 
 
 def _resolve_aoi(body: AnalyzeRequest) -> tuple[dict[str, Any], str, str | None]:

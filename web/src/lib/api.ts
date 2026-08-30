@@ -4,7 +4,9 @@ import type {
   City,
   CoolingResponse,
   EnrichResponse,
+  HoursResponse,
   SviResponse,
+  WalkExposure,
   WalkRoute,
   WeatherResponse,
 } from "./types";
@@ -176,6 +178,40 @@ export async function writeBrief(payload: {
     signal: AbortSignal.timeout(50_000),
   });
   return parse<{ text: string; source: string; model: string | null }>(res);
+}
+
+export async function getHoursContext(payload: {
+  lat: number;
+  lon: number;
+  date: string;
+  time: string;
+  threshold_c: number;
+}) {
+  const qs = new URLSearchParams({
+    lat: String(payload.lat),
+    lon: String(payload.lon),
+    date: payload.date,
+    time: payload.time,
+    threshold_c: String(payload.threshold_c),
+  });
+  const res = await fetch(`${API_URL}/v1/tools/hours?${qs}`, {
+    signal: AbortSignal.timeout(20_000),
+  });
+  return parse<HoursResponse>(res);
+}
+
+export async function postWalkExposure(payload: {
+  coordinates: [number, number][];
+  heatmap?: AnalyzeResponse["heatmap"] | null;
+  threshold_c: number;
+}) {
+  const res = await fetch(`${API_URL}/v1/tools/walk-exposure`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
+  });
+  return parse<WalkExposure>(res);
 }
 
 export async function fetchSvi(payload: {

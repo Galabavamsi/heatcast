@@ -103,6 +103,12 @@ export default function MethodPage() {
                 A slider that estimates a small air-temperature change from added canopy (about 0.015 °C per 1%, capped). Pins you plant are visual. Neither is a new satellite or heatmap run.
               </dd>
             </div>
+            <div>
+              <dt className="font-medium text-slate-100">Tools workspace</dt>
+              <dd className="mt-1 text-slate-400">
+                A separate <code className="text-slate-300">/tools</code> hub — not scorecard tabs. Cooling plan attributes literature ΔT (canopy + labeled roof/pavement). Walk exposure samples nearest air tiles along the existing OSRM indoor walk. Peak hours are an Open-Meteo heat-load proxy plus FortyGuard duration after Score. Compound hours use Open-Meteo humidity and, when present, US AQI — never invented CO2 or methane.
+              </dd>
+            </div>
           </dl>
         </section>
 

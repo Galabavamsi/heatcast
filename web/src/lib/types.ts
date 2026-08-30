@@ -224,6 +224,123 @@ export type EnrichResponse = {
   errors: Record<string, string> | null;
 };
 
+export type HourlyWeather = {
+  times: string[];
+  temp_c: Array<number | null>;
+  rh_pct: Array<number | null>;
+  apparent_c: Array<number | null>;
+  ghi_wm2: Array<number | null>;
+  source?: string;
+  attribution?: string;
+  caveat?: string;
+};
+
+export type AqiSeries = {
+  ok?: boolean;
+  source?: string;
+  us_aqi: Array<number | null>;
+  pm25?: Array<number | null>;
+  times?: string[];
+  attribution?: string;
+  caveat?: string;
+  cached?: boolean;
+};
+
+export type PeakHourRow = {
+  hour: string;
+  temp_c: number | null;
+  heat_load: number;
+  ghi_wm2: number | null;
+  above_threshold: boolean;
+};
+
+export type PeakHours = {
+  kind: string;
+  metric?: string;
+  not_used?: string;
+  threshold_c: number;
+  hours: PeakHourRow[];
+  heat_load_sum: number;
+  hours_above: number;
+  hottest: { hour: string; temp_c: number; index?: number } | null;
+  unrelieved_streak_h: number;
+  unrelieved_window: { start: string | null; end: string | null } | null;
+  solar_peak: { hour: string; ghi_wm2: number; temp_c?: number | null } | null;
+  label?: string;
+};
+
+export type CompoundHourRow = {
+  hour: string;
+  temp_c: number | null;
+  rh_pct: number | null;
+  us_aqi: number | null;
+  hot: boolean;
+  humidity_compound: boolean;
+  aqi_compound: boolean;
+  compound: boolean;
+};
+
+export type CompoundHours = {
+  kind: string;
+  not_used?: string;
+  threshold_c: number;
+  rh_cut: number;
+  aqi_cut: number;
+  has_us_aqi: boolean;
+  has_humidity: boolean;
+  hours: CompoundHourRow[];
+  compound_hours: number;
+  humidity_compound_hours: number;
+  aqi_compound_hours: number;
+  label?: string;
+  aqi_note?: string | null;
+};
+
+export type HoursResponse = {
+  lat: number;
+  lon: number;
+  date: string;
+  time: string;
+  timezone?: string;
+  threshold_c: number;
+  hourly: HourlyWeather | null;
+  aqi: AqiSeries | null;
+  peak: PeakHours;
+  compound: CompoundHours;
+  comfort?: ComfortContext | null;
+};
+
+export type WalkExposureSample = {
+  lon: number;
+  lat: number;
+  along_m: number;
+  temp_c: number | null;
+  hours?: number | null;
+  tile_id?: string | number | null;
+};
+
+export type WalkExposure = {
+  ok: boolean;
+  kind?: string;
+  not_used?: string;
+  threshold_c?: number;
+  samples: WalkExposureSample[];
+  mean_c?: number | null;
+  max_c?: number | null;
+  share_above?: number | null;
+  hottest_stretch?: {
+    start_index: number;
+    end_index: number;
+    mean_c: number;
+    max_c: number;
+    from_m?: number | null;
+    to_m?: number | null;
+  } | null;
+  distance_m?: number;
+  label?: string;
+  note?: string;
+};
+
 export type WeatherResponse = {
   city_id?: string;
   lat: number;
@@ -232,6 +349,8 @@ export type WeatherResponse = {
   timezone?: string;
   rain: RainContext | null;
   comfort?: ComfortContext | null;
+  hourly?: HourlyWeather | null;
+  aqi?: AqiSeries | null;
   flood?: { zone?: string | null; subtype?: string | null; caveat?: string } | null;
   elevation_m?: number | null;
 };

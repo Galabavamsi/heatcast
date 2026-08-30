@@ -10,7 +10,7 @@ Product README (clone-and-run): [README.md](./README.md).
 | **Team** | HumanSlop · FG-141 · Track 1 urban planning |
 | **Deadline** | **30 Aug 2026** |
 | **Collaborator** | GitHub user **Hackathon-FG** (write) |
-| **Last snapshot** | 21 Aug 2026 |
+| **Last snapshot** | 31 Aug 2026 |
 
 **Secrets stay out of git.** `FORTYGUARD_API_KEY` and `LLM_API_KEY` live only in gitignored `api/.env`. Do not paste keys into this file, PRs, or chat logs you will commit.
 
@@ -33,13 +33,14 @@ Suggested commit trailers (optional): `Handover: snapshot + changelog`.
 
 ## Snapshot — overwrite this block
 
-**As of 21 Aug 2026** (docs commit; product already on `main` as `515b8ff`)
+**As of 31 Aug 2026** (`/tools` hub on `main`; `render.yaml` still pending Dashboard apply)
 
-HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The map scores a **drawn US AOI** on 2 m air tiles (TCM) plus **exceedance** (total hours) and **persistence** (longest consecutive streak), then an **unrelieved-heat ratio** (streak ÷ hours, HeatCast index 0–1), then overlays SVI / shade / indoor cool space / OSRM walk / a tree sketch, and a planner brief. Client-side **Export** writes JSON / GeoJSON / brief `.txt` after Score (satellite omitted if still null). Share URLs restore bbox+date+end+time (`/app?west=&south=&east=&north=&date=&end=&time=`); they do **not** auto-score. FortyGuard is one measurement API, not the product name in every chip.
+HeatCast is a small US-only site: landing `/`, map `/app`, inferred tools `/tools`, method `/method`. The map scores a **drawn US AOI** on 2 m air tiles (TCM) plus **exceedance** (total hours) and **persistence** (longest consecutive streak), then an **unrelieved-heat ratio** (streak ÷ hours, HeatCast index 0–1), then overlays SVI / shade / indoor cool space / OSRM walk / a tree sketch, and a planner brief. **Tools** is a separate workspace (not scorecard tabs) with Cooling plan, Walk exposure, Peak hours, and Compound hours — HeatCast-named, literature/Open-Meteo labeled. Client-side **Export** writes JSON / GeoJSON / brief `.txt` after Score (satellite omitted if still null). Share URLs restore bbox+date+end+time (`/app` and `/tools` share `west=&south=&east=&north=&date=&time=`); they do **not** auto-score tiles. FortyGuard is one measurement API, not the product name in every chip.
 
 | Area | State |
 |---|---|
-| Site | Working. `/` product page (duration / indoor walk / planting beats + CTA). `/app` is the map. `/method` is honest layer notes (hours vs streak, unrelieved ratio, Range ΔT, OSRM walk). Nav: HeatCast · Score · Method. |
+| Site | Working. `/` product page (duration / indoor walk / planting beats + Score / Tools CTAs). `/app` is the map. `/tools` is the inferred-tools hub (`/tools/cooling`, `/walk`, `/peak`, `/compound`). `/method` is honest layer notes (hours vs streak, unrelieved ratio, Range ΔT, OSRM walk, tools). Nav: Home · Score · Tools · Method. |
+| Tools workspace | Working. Separate route (not scorecard tabs). Cooling plan (canopy air CE + labeled roof/pavement literature). Walk exposure (OSRM + nearest TCM). Peak hours (Open-Meteo heat-load + optional GHI; FG duration after Score). Compound hours (Open-Meteo RH / US AQI). Coming-soon cards have no dummy numbers. Share bbox/date/time with `/app`. Does not auto-score tiles. |
 | Score / heatmap | Working. Canvas raster image source. Demo **From=To=`2024-07-15` 15:00**. |
 | Date range | Working. Header **Day \| Range**. Day = one date. Range = From + To + Hour, cap **7 inclusive days**. Same day → duration `filter_type=3` (no `end_date`, existing caches). 2–7 days → `end_date` + `filter_type=4` (range-of-days product). TCM / shade / comfort still use **From + Hour**. Not a custom 3-day exceedance. |
 | Range ΔT | Working when From ≠ To. Second TCM at **To + the scored Hour**. Map: **ΔT (range)** (To − From) and noisy **ΔT edges** (\|∇ΔT\|). **Play** cycles Hour only; it does not Score and does not recompute ΔT. |
@@ -56,7 +57,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 | Enrich | Satellite + env first (~45 s), streetview/PDF extra (~12 s), pool `shutdown(wait=False)`. Browser abort **80 s**. Streetview timeouts are not a red banner if satellite/env arrived. Hottest-tile satellite stack stays in Brief. |
 | OSM | Sequential cooling then buildings. Overpass fail-open + disk cache. |
 | LLM | Server-only. Model **`deepseek-v4-flash`** (this key also has `deepseek-v4-pro`; no `deepseek-chat`). |
-| Public deploy | **Not shipped.** CORS is localhost-only. Render needs `0.0.0.0:$PORT`, server env keys, CORS + `NEXT_PUBLIC_API_URL`. |
+| Public deploy | **Blueprint on `main`.** `render.yaml` = heatcast-api + heatcast-web. CORS = localhost + `CORS_ORIGINS` + `https://*.onrender.com`. Apply: https://dashboard.render.com/blueprint/new?repo=https://github.com/Galabavamsi/heatcast — then set API secrets and `NEXT_PUBLIC_API_URL`. Public URLs not live until that apply. |
 | Judging caches | **Not frozen.** EaDo / Museum / Phoenix `2024-07-15` should be cached before demo day. One-day duration cache keys are unchanged. |
 | Video + 500-word summary | **Not started.** Deadline **30 Aug 2026**. |
 
@@ -68,6 +69,8 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 
 | Date | Who | What |
 |---|---|---|
+| 2026-08-31 | Vamsi / agent | Tools workspace `/tools`: Cooling plan, Walk exposure, Peak hours, Compound hours. Separate route (not scorecard tabs). Literature roof/pavement + Open-Meteo hourly/GHI/US AQI. Tests for cooling-plan, hours-infer, walk-exposure. |
+| 2026-08-30 | Vamsi / agent | Render Blueprint (`render.yaml`): heatcast-api + heatcast-web, `0.0.0.0:$PORT`, CORS env + onrender regex. Public URLs pending Dashboard apply (MCP/CLI had no workspace). |
 | 2026-08-21 | Vamsi / agent | README + HANDOVER: docs match shipped Day\|Range, ΔT tiles, unrelieved ratio, OSRM walk, duration charts, Scorecard next to Export, Houston URL box ≈ 2.20 mi². Dropped “do not start walking/OSRM”. |
 | 2026-08-21 | Vamsi / agent | Range ΔT: second TCM at To + scored Hour; map toggles ΔT (range) / ΔT edges; Play does not recompute ΔT. |
 | 2026-08-21 | Vamsi / agent | Scorecard collapse: labeled **Scorecard** button (`top-24 right-4`); header stays `inset-x-4` so toggling the drawer no longer jumps search/dates (`lg:right-[22rem]` removed). |
@@ -92,7 +95,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 ### Must before 30 Aug
 
 - [ ] Freeze **EaDo + Museum District** (optional Phoenix) TCM + exceedance + OSM caches for **2024-07-15 15:00** so judging is not a live credit lottery.
-- [ ] Public **Render** (or similar) demo: API + web, no login. Bind `0.0.0.0:$PORT`. Keys in server env. CORS for the web origin. `NEXT_PUBLIC_API_URL` at web **build** time.
+- [ ] Public **Render** demo: Blueprint is on `main`. Still need Dashboard **Apply** + env vars, then paste the two public URLs here.
 - [ ] Confirm **Hackathon-FG** still has write on github.com/Galabavamsi/heatcast.
 - [ ] **~3 min video** + **~500 word** summary. Pitch: hours vs longest streak **as one unrelieved-heat ratio**, walk to indoor cool space, tree sketch that does **not** pretend to be a new heatmap.
 
@@ -103,6 +106,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 
 ### Done
 
+- [x] 2026-08-31 — Tools hub + 4 grounded inferences on `/tools*` (not scorecard tabs). Cooling plan / walk exposure / peak hours / compound hours. Honest labels; no OSHA/WBGT/vaccine/CO2 claims.
 - [x] 2026-08-21 — AOI mi² uses WGS84 cos(lat) on longitude; Houston share-URL box locked at ≈ 2.20 mi² (not 2.59). `api/tests/test_geo_area.py`.
 - [x] 2026-08-21 — Date range (honest FG day vs range-of-days) + Duration/Place/Brief docks + extra SVG meters.
 - [x] 2026-08-21 — Product pages (`/`, `/app`, `/method`) + client exports + share-URL restore (no auto-score).
@@ -120,6 +124,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-08-31 | Inferred tools live on `/tools`, not inside `/app` Range\|Day\|Place\|Brief | Scorecard stays the district score. Webinar-style suite is a separate workspace. HeatCast names only; FortyGuard is one API. |
 | 2026-08-21 | Range ΔT = To − From TCM at the same clock hour; |∇ΔT| is “edges of change,” not a flux | Day-to-day ΔT at one hour shows which fabric stored heat. CAPA Heat Watch maps morning/afternoon/evening separately. Do not animate N deltas on Play. |
 | 2026-08-21 | From/To date picker; duration is one day or up to 7 days via `filter_type` 3 vs 4 | FG `create_heatmap` documents 4 as range of days with `end_date`, not a calendar-week lock and not a custom N-day product. TCM/shade/comfort stay on From+Hour. Cap 7 days. Demo stays `2024-07-15`. |
 | 2026-08-21 | `/app` two right docks (Duration + Place) with Brief as a Duration tab | One 22rem scroller of 12 cards was unusable. Place hidden until scored. Narrow screens use Duration/Place/Brief tabs. |
@@ -139,7 +144,7 @@ HeatCast is a small US-only site: landing `/`, map `/app`, method `/method`. The
 
 ## What this is / is not
 
-**Is:** Track 1 urban-planner simulator. Score a US district on **2 m air** tiles, hours above threshold, longest hot streak, **unrelieved-heat ratio** (streak ÷ hours), walk to nearby indoor space, and a labeled tree-planting sketch. FortyGuard is the air/duration API among several. 2D is the scorecard. 3D is pitched OSM massing + heat. UI name HeatCast; folder `heatlens`.
+**Is:** Track 1 urban-planner simulator. Score a US district on **2 m air** tiles, hours above threshold, longest hot streak, **unrelieved-heat ratio** (streak ÷ hours), walk to nearby indoor space, and a labeled tree-planting sketch. **`/tools`** adds grounded inferences (cooling plan, walk exposure, peak hours, compound hours) in a separate workspace. FortyGuard is the air/duration API among several. 2D is the scorecard. 3D is pitched OSM massing + heat. UI name HeatCast; folder `heatlens`.
 
 **Is not:**
 

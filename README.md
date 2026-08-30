@@ -82,11 +82,13 @@ HeatCast is a small site plus the map:
 
 | Route | What it is |
 |---|---|
-| `/` | Product landing (duration / indoor walk / planting beats + **Score a neighborhood**) |
-| `/app` | Map + scorecard (the product) |
+| `/` | Product landing (duration / indoor walk / planting beats + **Score a neighborhood** / **Open tools**) |
+| `/app` | Map + scorecard (the product). Overlay tabs stay **Range \| Day \| Place \| Brief**. |
+| `/tools` | Separate inferred-tools hub (cooling plan, walk exposure, peak hours, compound hours) |
+| `/tools/cooling` `/tools/walk` `/tools/peak` `/tools/compound` | Drill-in views. Same bbox/date/time query params as `/app`. |
 | `/method` | Honest layer notes (what it is / is not) |
 
-Nav: **HeatCast · Score · Method**. After Score, **Export** (header, next to **Scorecard**) downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief `.txt`, and (if present) hours/TCM tiles. A share URL restores the box, date, optional end date, and hour — it does **not** auto-score.
+Nav: **Home · Score · Tools · Method**. After Score, **Export** (header, next to **Scorecard**) downloads scorecard JSON, AOI+hotspot GeoJSON, the planner brief `.txt`, and (if present) hours/TCM tiles. A share URL restores the box, date, optional end date, and hour — it does **not** auto-score. **Tools** is a first-class route, not a scorecard tab.
 
 ## How a session works
 
@@ -149,7 +151,7 @@ flowchart TB
 | **Export** | Client downloads after Score | JSON, GeoJSON, brief `.txt` — no API keys |
 | **Scorecard** | Opens the right drawer (large screens) or bottom sheet (narrow) | Sits next to Export when the drawer is hidden |
 
-### Tools
+### Map tools (left rail)
 
 | Control | What it does | Why |
 |---|---|---|
@@ -214,6 +216,23 @@ One right drawer (~21 rem) overlays the map. Header stays full width (`inset-x-4
 - Range ΔT is two TCM snapshots at one clock hour. ΔT edges are noisy 100 m gradients, not a heat flux. Play does not animate N deltas.
 
 Do **not** expand into India, UTCI, NWS HeatRisk, deck.gl, bus-stop clones, a citywide cool-route app, or a second product.
+- `/tools` inferences stay labeled: cooling-plan roof/pavement are literature air estimates; peak hours are a neighborhood heat-load proxy (not MW / EIA / duck curve); compound hours use Open-Meteo humidity / US AQI, never invented CO2 or methane.
+
+---
+
+## Tools workspace (`/tools`)
+
+A small HeatCast suite on the **same US box and demo date**. Inspired by webinar example apps, but HeatCast-named and honest about data. FortyGuard remains one measurement API.
+
+| Tool | Infers from | Does not claim |
+|---|---|---|
+| **Cooling plan** | Scored TCM mean + existing canopy air CE (~0.015 °C / 1%). Optional cool-roof (~0.008 °C / 1%) and pavement (~0.005 °C / 1%) literature levers. Attribution bars. Satellite mix at the hotspot if enrich already returned buckets. | A new FortyGuard heatmap. Invented 52.7% building shares. LST CE. |
+| **Walk exposure** | Existing OSRM walk (hotspot → indoor OSM site) sampled on nearest TCM tiles. Distance, duration, hottest stretch. | Cargo, vaccines, WBGT, OSHA, multi-stop logistics. |
+| **Peak hours** | Open-Meteo hourly 2 m air → degree-hours above threshold + unrelieved streak. Optional GHI panel (Open-Meteo). After Score: FG mean hours / streak / unrelieved ratio. | Transformer MW, duck curve, EIA. |
+| **Compound hours** | Open-Meteo heat + RH; US AQI when the free series lands. | FortyGuard env AQI (this enrich path does not request it). CO2 / methane. |
+| **Coming later** | Cards only: site hour table, carbon-aware window, insurance score. | Dummy numbers. |
+
+Share params (`west`, `south`, `east`, `north`, `date`, `time`) match `/app`. Tools does **not** auto-score tiles (saves credits). Peak / compound auto-load the free Open-Meteo hourly series after the URL hydrates. Default preset is Houston EaDo; Houston threshold 35 °C, Phoenix 38 °C. Demo date **2024-07-15 15:00**.
 
 ---
 
@@ -238,6 +257,7 @@ flowchart LR
     E["POST /v1/enrich\nsatellite + env first"]
     O["GET cooling / buildings"]
     W["GET /v1/walk\nOSRM"]
+    T["GET /v1/tools/hours\nPOST cooling + walk-exposure"]
     B["POST /v1/brief\nDeepSeek after layers"]
   end
   FG[FortyGuard Premium]
@@ -246,6 +266,7 @@ flowchart LR
   UI --> E --> FG
   UI --> O
   UI --> W
+  UI --> T
   UI --> B
 ```
 
@@ -278,7 +299,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000** (landing), then **Score a neighborhood** → **http://localhost:3000/app**. Method is `/method`. Repeat the East Downtown example above. Hard-refresh after `package.json` changes.
+Open **http://localhost:3000** (landing), then **Score a neighborhood** → **http://localhost:3000/app**. Tools is `/tools` (hard-refresh after pull). Method is `/method`. Repeat the East Downtown example above. Hard-refresh after `package.json` changes.
 
 ### Env (`api/.env` — gitignored)
 
@@ -321,14 +342,17 @@ Demo presets in `api/app/cities.py`: Houston EaDo, Houston Museum District, Phoe
 | GET | `/v1/buildings` | OSM footprints (empty FC + `meta.error` on failure, not HTTP 502) |
 | GET | `/v1/cooling` | OSM indoor public sites |
 | GET | `/v1/osm` | Both OSM layers |
-| GET | `/v1/weather` | Open-Meteo rain / heat index + FEMA chip + USGS elevation |
+| GET | `/v1/weather` | Open-Meteo rain / heat index / hourly + GHI + optional US AQI + FEMA chip + USGS elevation |
+| GET | `/v1/tools/hours` | Open-Meteo peak + compound inferences (no FortyGuard call) |
+| POST | `/v1/tools/cooling` | Literature cooling-plan attribution (no FortyGuard call) |
+| POST | `/v1/tools/walk-exposure` | Nearest TCM tile along an OSRM polyline |
 | POST | `/v1/scenario` | Literature ΔT without re-running FortyGuard |
 | GET | `/v1/credits` | Key usage, secrets stripped |
 | GET | `/v1/outputs/{file}` | Heat-intelligence PDF |
 
 FortyGuard Premium (server-side): `tcm`, `exceedance`, `persistence`, `environmental_parameters`, `satellite_segmentation`, `street_view_segmentation` (often times out), `heat_intelligence` PDF.
 
-Non-FG: Open-Meteo, OSM Overpass, OSRM, FEMA NFHL, USGS 3DEP, CDC/ATSDR SVI 2022, optional DeepSeek.
+Non-FG: Open-Meteo (including free GHI + US AQI for Tools), OSM Overpass, OSRM, FEMA NFHL, USGS 3DEP, CDC/ATSDR SVI 2022, optional DeepSeek.
 
 ---
 
@@ -348,12 +372,20 @@ Full gotcha list: [HANDOVER.md](./HANDOVER.md).
 
 ## Deploy (Render)
 
-- One service per process. Bind HTTP to **`0.0.0.0:$PORT`**.
-- Filesystem is **ephemeral** — freeze demo caches before judging, or accept re-bills.
-- Keys in **server env**, not the frontend. Add the public web origin to CORS (today localhost-only).
-- Set `NEXT_PUBLIC_API_URL` at **build** time for the web service.
+Two services (`render.yaml`): **heatcast-api** (FastAPI) and **heatcast-web** (Next.js). One process each. Bind HTTP to **`0.0.0.0:$PORT`**.
 
-Public Render is **not shipped**. Demo caches are **not frozen**. The ~3 min video and ~500-word summary are **not started**. Deadline **30 Aug 2026**.
+Apply the Blueprint: [dashboard.render.com/blueprint/new?repo=https://github.com/Galabavamsi/heatcast](https://dashboard.render.com/blueprint/new?repo=https://github.com/Galabavamsi/heatcast)
+
+| Service | Confirm in Dashboard (names only) |
+|---|---|
+| **API** | `FORTYGUARD_API_KEY` (required). Optional: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `CORS_ORIGINS` (web origin once you have it). |
+| **Web** | `NEXT_PUBLIC_API_URL` = the **public API URL** (set **before** the web build). Never put FortyGuard keys on the web service. |
+
+- Filesystem is **ephemeral** — freeze demo caches before judging, or accept re-bills.
+- CORS allows localhost plus `https://*.onrender.com` (and `CORS_ORIGINS`).
+- After deploy: `GET {API}/health` then open `{WEB}/app`.
+
+Public URLs: **pending first Render apply** (this machine has no Render workspace session). Demo caches are **not frozen**. The ~3 min video and ~500-word summary are **not started**. Deadline **30 Aug 2026**.
 
 ---
 

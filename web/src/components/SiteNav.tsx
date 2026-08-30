@@ -1,16 +1,21 @@
 import Link from "next/link";
 
-export type SiteSection = "home" | "score" | "method";
+export type SiteSection = "home" | "score" | "tools" | "method";
 
 export function SiteNav({
   active,
   compact = false,
+  query = "",
 }: {
   active: SiteSection;
   compact?: boolean;
+  query?: string;
 }) {
+  const q = query && query.startsWith("?") ? query : query ? `?${query}` : "";
   const links: Array<{ href: string; id: SiteSection; label: string }> = [
-    { href: "/app", id: "score", label: "Score" },
+    { href: "/", id: "home", label: "Home" },
+    { href: `/app${q}`, id: "score", label: "Score" },
+    { href: `/tools${q}`, id: "tools", label: "Tools" },
     { href: "/method", id: "method", label: "Method" },
   ];
   return (
@@ -33,11 +38,6 @@ export function SiteNav({
             : "flex items-center gap-4 text-sm text-slate-400"
         }
       >
-        {compact && (
-          <Link href="/" className="hover:text-cyan-200">
-            Home
-          </Link>
-        )}
         {links.map((link) => {
           const on = active === link.id;
           return (
